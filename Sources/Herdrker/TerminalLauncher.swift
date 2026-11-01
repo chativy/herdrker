@@ -18,25 +18,23 @@ struct TerminalLauncher: Sendable {
             return
         }
 
-        let arguments = Self.liveAttachArguments(for: task)
+        let command = Self.liveAttachCommand(
+            executableURL: coreExecutableURL,
+            address: task.address
+        )
         if hasGhostty {
             try openInGhostty(
                 task: task,
-                executableURL: coreExecutableURL,
-                arguments: arguments
+                executableURL: URL(fileURLWithPath: "/bin/zsh"),
+                arguments: ["-lc", command]
             )
         } else {
-            try openInTerminal(
-                command: Self.shellCommand(
-                    executableURL: coreExecutableURL,
-                    arguments: arguments
-                )
-            )
+            try openInTerminal(command: command)
         }
     }
 
     static func liveAttachArguments(for task: HerdrTask) -> [String] {
-        return ["attach", task.address]
+        return ["attach", "--history", "1000", task.address]
     }
 
     static func readOnlyCommand(executableURL: URL, address: String) -> String {
@@ -45,7 +43,19 @@ struct TerminalLauncher: Sendable {
             arguments: ["read", address]
         )
         let notice = "\\n[Read-only final screen. Close this terminal window to exit.]\\n"
-        return "\(readCommand); printf '\(notice)'; exec /bin/sleep 2147483647"
+        return """
+        \(waitForStableTerminalSize) \
+        \(readCommand) | /usr/bin/less -R -S; \
+        printf '\(notice)'; exec /bin/sleep 2147483647
+        """
+    }
+
+    static func liveAttachCommand(executableURL: URL, address: String) -> String {
+        let attachCommand = shellCommand(
+            executableURL: executableURL,
+            arguments: ["attach", "--history", "1000", address]
+        )
+        return "\(waitForStableTerminalSize) exec \(attachCommand)"
     }
 
     static func shellCommand(executableURL: URL, arguments: [String]) -> String {
@@ -61,6 +71,15 @@ struct TerminalLauncher: Sendable {
     private var hasGhostty: Bool {
         FileManager.default.fileExists(atPath: ghosttyApplicationURL.path)
     }
+
+    private static let waitForStableTerminalSize = """
+    previous=""; \
+    for attempt in 1 2 3 4 5 6 7 8; do \
+        current="$(stty size 2>/dev/null)"; \
+        if [[ -n "$previous" && "$current" == "$previous" ]]; then break; fi; \
+        previous="$current"; sleep 0.1; \
+    done;
+    """
 
     private func openReadOnlyFinalScreen(
         task: HerdrTask,

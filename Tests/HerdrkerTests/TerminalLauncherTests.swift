@@ -15,7 +15,7 @@ final class TerminalLauncherTests: XCTestCase {
 
         XCTAssertEqual(
             TerminalLauncher.liveAttachArguments(for: live),
-            ["attach", "t3"]
+            ["attach", "--history", "1000", "t3"]
         )
     }
 
@@ -26,8 +26,19 @@ final class TerminalLauncherTests: XCTestCase {
         )
 
         XCTAssertTrue(command.contains("'read' 'mini/t9'"))
+        XCTAssertTrue(command.contains("/usr/bin/less -R -S"))
         XCTAssertTrue(command.contains("/bin/sleep 2147483647"))
         XCTAssertFalse(command.contains("attach"))
+    }
+
+    func testLiveAttachWaitsForStableTerminalSize() {
+        let command = TerminalLauncher.liveAttachCommand(
+            executableURL: URL(fileURLWithPath: "/usr/local/bin/herdr-core"),
+            address: "t2"
+        )
+
+        XCTAssertTrue(command.contains("stty size"))
+        XCTAssertTrue(command.contains("'attach' '--history' '1000' 't2'"))
     }
 
     func testShellCommandQuotesSingleQuotes() {
