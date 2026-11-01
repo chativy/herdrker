@@ -32,6 +32,7 @@ The first 10 tasks in menu order receive `Command+Option+1…9` and
 `Command+Option+0`. Use **Assign Hotkey…** to press and set another modifier
 prefix such as `Command+Control`. A shortcut focuses the task's existing
 tracked window or opens it.
+The same prefix applies to New Task (`N`), Refresh (`R`), and Quit (`Q`).
 
 Herdr Core keeps 5 MiB of scrollback per live terminal by default. Set
 `history_mb` in `~/.config/herdr-core/config.toml` to change that byte budget.

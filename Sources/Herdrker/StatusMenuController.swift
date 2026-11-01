@@ -230,26 +230,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        if !shortcutTasks.isEmpty {
-            let assignItem = NSMenuItem(
-                title: "Assign Hotkey… (\(hotkeyPrefix.display))",
-                action: #selector(assignHotKey),
-                keyEquivalent: ""
-            )
-            assignItem.target = self
-            assignItem.image = NSImage(
-                systemSymbolName: "keyboard",
-                accessibilityDescription: "Assign hotkey"
-            )
-            menu.addItem(assignItem)
-        }
-
         let newTaskItem = NSMenuItem(
             title: "New Task…",
             action: #selector(showNewTask),
             keyEquivalent: "n"
         )
         newTaskItem.target = self
+        newTaskItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
         newTaskItem.image = NSImage(
             systemSymbolName: "plus.square",
             accessibilityDescription: "New task"
@@ -274,15 +261,29 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             keyEquivalent: "r"
         )
         refreshItem.target = self
+        refreshItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
         menu.addItem(refreshItem)
 
         menu.addItem(.separator())
+        let assignItem = NSMenuItem(
+            title: "Assign Hotkey… (\(hotkeyPrefix.display))",
+            action: #selector(assignHotKey),
+            keyEquivalent: ""
+        )
+        assignItem.target = self
+        assignItem.image = NSImage(
+            systemSymbolName: "keyboard",
+            accessibilityDescription: "Assign hotkey"
+        )
+        menu.addItem(assignItem)
+
         let quitItem = NSMenuItem(
             title: "Quit Herdrker",
             action: #selector(quitApplication),
             keyEquivalent: "q"
         )
         quitItem.target = self
+        quitItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
         menu.addItem(quitItem)
     }
 
@@ -593,6 +594,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     fileprivate func handleGlobalHotKey(id: UInt32) {
+        switch id {
+        case 101:
+            showNewTask()
+            return
+        case 102:
+            refreshNow()
+            return
+        case 103:
+            quitApplication()
+            return
+        default:
+            break
+        }
+
         let index = Int(id) - 1
         guard shortcutTasks.indices.contains(index) else {
             return
@@ -622,16 +637,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             return 0
         }
 
-        let keyCodes: [UInt32] = [18, 19, 20, 21, 23, 22, 26, 28, 25, 29]
+        let bindings: [(id: UInt32, keyCode: UInt32)] = [
+            (1, 18), (2, 19), (3, 20), (4, 21), (5, 23),
+            (6, 22), (7, 26), (8, 28), (9, 25), (10, 29),
+            (101, 45), (102, 15), (103, 12)
+        ]
         let modifiers = hotkeyPrefix.carbonModifiers
-        for (index, keyCode) in keyCodes.enumerated() {
+        for binding in bindings {
             var hotKeyRef: EventHotKeyRef?
             let hotKeyID = EventHotKeyID(
                 signature: herdrkerHotKeySignature,
-                id: UInt32(index + 1)
+                id: binding.id
             )
             let status = RegisterEventHotKey(
-                keyCode,
+                binding.keyCode,
                 modifiers,
                 hotKeyID,
                 GetApplicationEventTarget(),
@@ -679,11 +698,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let registered = registerGlobalHotKeys()
         rebuildMenu()
 
-        if registered < 10 {
+        if registered < 13 {
             let warning = NSAlert()
             warning.messageText = "Some hotkeys are unavailable"
             warning.informativeText =
-                "Only \(registered) of 10 global shortcuts could be registered. Another application or macOS may be using this combination."
+                "Only \(registered) of 13 global shortcuts could be registered. Another application or macOS may be using this combination."
             warning.runModal()
         }
     }
