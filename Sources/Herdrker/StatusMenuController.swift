@@ -21,6 +21,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private var tasks: [HerdrTask] = []
     private var groups: [HerdrHostGroup] = []
     private var loadError: String?
+    private var isMenuOpen = false
     private var refreshLoop: Task<Void, Never>?
     private var activeDialog: DialogWindowController?
 
@@ -66,9 +67,15 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        isMenuOpen = true
         Task { [weak self] in
             await self?.refresh()
         }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        isMenuOpen = false
+        rebuildMenu()
     }
 
     private func refresh() async {
@@ -93,7 +100,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         groups = HerdrModel.groups(hosts: nextHosts, tasks: nextTasks)
         loadError = errors.first
         updateStatusIcon(hasTasks: !nextTasks.isEmpty)
-        rebuildMenu()
+        if !isMenuOpen {
+            rebuildMenu()
+        }
     }
 
     private func rebuildMenu() {
