@@ -2,16 +2,7 @@ import XCTest
 @testable import Herdrker
 
 final class TerminalLauncherTests: XCTestCase {
-    func testFinishedTaskUsesObserveMode() {
-        let finished = HerdrTask(
-            address: "mini/t9",
-            name: "deploy",
-            title: nil,
-            machine: "mini",
-            state: "finished",
-            status: "done",
-            createdAt: nil
-        )
+    func testLiveTaskUsesAttachMode() {
         let live = HerdrTask(
             address: "t3",
             name: "shell",
@@ -23,13 +14,20 @@ final class TerminalLauncherTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            TerminalLauncher.attachArguments(for: finished),
-            ["attach", "--observe", "mini/t9"]
-        )
-        XCTAssertEqual(
-            TerminalLauncher.attachArguments(for: live),
+            TerminalLauncher.liveAttachArguments(for: live),
             ["attach", "t3"]
         )
+    }
+
+    func testFinishedTaskReadsFinalScreenWithoutAttaching() {
+        let command = TerminalLauncher.readOnlyCommand(
+            executableURL: URL(fileURLWithPath: "/usr/local/bin/herdr-core"),
+            address: "mini/t9"
+        )
+
+        XCTAssertTrue(command.contains("'read' 'mini/t9'"))
+        XCTAssertTrue(command.contains("/bin/sleep 2147483647"))
+        XCTAssertFalse(command.contains("attach"))
     }
 
     func testShellCommandQuotesSingleQuotes() {

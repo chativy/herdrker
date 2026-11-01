@@ -10,12 +10,17 @@ struct TerminalLauncher: Sendable {
     }
 
     func open(task: HerdrTask, coreExecutableURL: URL) throws {
-        let arguments = Self.attachArguments(for: task)
-        if FileManager.default.fileExists(atPath: ghosttyApplicationURL.path) {
-            try openInGhostty(
-                executableURL: coreExecutableURL,
-                coreArguments: arguments
+        if task.isFinished {
+            try openReadOnlyFinalScreen(
+                task: task,
+                coreExecutableURL: coreExecutableURL
             )
+            return
+        }
+
+        let arguments = Self.liveAttachArguments(for: task)
+        if hasGhostty {
+            try openInGhostty(executableURL: coreExecutableURL, arguments: arguments)
         } else {
             try openInTerminal(
                 command: Self.shellCommand(
@@ -26,11 +31,17 @@ struct TerminalLauncher: Sendable {
         }
     }
 
-    static func attachArguments(for task: HerdrTask) -> [String] {
-        if task.isFinished {
-            return ["attach", "--observe", task.address]
-        }
+    static func liveAttachArguments(for task: HerdrTask) -> [String] {
         return ["attach", task.address]
+    }
+
+    static func readOnlyCommand(executableURL: URL, address: String) -> String {
+        let readCommand = shellCommand(
+            executableURL: executableURL,
+            arguments: ["read", address]
+        )
+        let notice = "\\n[Read-only final screen. Close this terminal window to exit.]\\n"
+        return "\(readCommand); printf '\(notice)'; exec /bin/sleep 2147483647"
     }
 
     static func shellCommand(executableURL: URL, arguments: [String]) -> String {
@@ -43,9 +54,31 @@ struct TerminalLauncher: Sendable {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
+    private var hasGhostty: Bool {
+        FileManager.default.fileExists(atPath: ghosttyApplicationURL.path)
+    }
+
+    private func openReadOnlyFinalScreen(
+        task: HerdrTask,
+        coreExecutableURL: URL
+    ) throws {
+        let command = Self.readOnlyCommand(
+            executableURL: coreExecutableURL,
+            address: task.address
+        )
+        if hasGhostty {
+            try openInGhostty(
+                executableURL: URL(fileURLWithPath: "/bin/zsh"),
+                arguments: ["-lc", command]
+            )
+        } else {
+            try openInTerminal(command: command)
+        }
+    }
+
     private func openInGhostty(
         executableURL: URL,
-        coreArguments: [String]
+        arguments: [String]
     ) throws {
         try runProcess(
             executableURL: URL(fileURLWithPath: "/usr/bin/open"),
@@ -53,7 +86,7 @@ struct TerminalLauncher: Sendable {
                 "-na", ghosttyApplicationURL.path,
                 "--args", "-e",
                 executableURL.path
-            ] + coreArguments,
+            ] + arguments,
             failureMessage: "Ghostty could not open the task."
         )
     }
