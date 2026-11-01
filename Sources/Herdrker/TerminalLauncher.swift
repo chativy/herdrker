@@ -45,6 +45,7 @@ final class TerminalLauncher {
         )
         let notice = "\\n[Read-only final screen. Close this terminal window to exit.]\\n"
         return """
+        \(HerdrEnvironment.shellReset)\
         \(waitForStableTerminalSize) \
         \(readCommand) | /usr/bin/less -R -S; \
         printf '\(notice)'; exec /bin/sleep 2147483647
@@ -59,7 +60,7 @@ final class TerminalLauncher {
             executableURL: executableURL,
             arguments: ["attach", "--history", allStoredHistoryLines, address]
         )
-        return "\(waitForStableTerminalSize) exec \(attachCommand)"
+        return "\(HerdrEnvironment.shellReset)\(waitForStableTerminalSize) exec \(attachCommand)"
     }
 
     nonisolated static func shellCommand(

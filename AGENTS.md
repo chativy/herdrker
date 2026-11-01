@@ -38,6 +38,8 @@ Implement the app in Swift 6 with AppKit status items and SwiftUI dialogs, built
 
 The executable should locate `herdr-core` from `PATH`, `~/.local/bin`, `/opt/homebrew/bin`, or `/usr/local/bin`. Report command failures through native alerts and refresh the menu after mutations.
 
+Herdrker may itself be launched from a Herdr Core task. Remove inherited `HC_TERMINAL_ID`, `HC_TERMINAL_SOCKET`, `HC_SCOPE`, and `HC_RUNTIME` from the app process, `hc` children, and newly created terminal commands. Preserve `HC_SESSION` and explicit `HC_SOCKET` configuration. This prevents self-attach loops and prevents task cleanup from sweeping Herdrker.
+
 ## Project Structure
 
 - `Sources/Herdrker/`: application, menu, dialog, model, and CLI client code.

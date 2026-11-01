@@ -75,6 +75,9 @@ selection behavior. Closing or reopening a viewer does not restart the task.
 Herdrker still respects mouse-reporting modes requested by full-screen programs.
 All Ghostty task windows are created inside the existing Ghostty application
 instance, so macOS shows one Ghostty icon in the Dock and application switcher.
+Task-local environment markers are removed from new viewers so opening Herdrker
+from inside a task cannot create a self-attach loop or join that task's cleanup
+scope.
 
 ## Scrollback Behavior
 

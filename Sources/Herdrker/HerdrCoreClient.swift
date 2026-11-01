@@ -216,7 +216,10 @@ final class HerdrCoreClient: HerdrCoreProviding, Sendable {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
-        process.environment = ProcessInfo.processInfo.environment.merging(
+        let inheritedEnvironment = HerdrEnvironment.removingTaskContext(
+            from: ProcessInfo.processInfo.environment
+        )
+        process.environment = inheritedEnvironment.merging(
             extraEnvironment,
             uniquingKeysWith: { _, new in new }
         )
