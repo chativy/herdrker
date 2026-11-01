@@ -21,6 +21,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 - Resolve the selected task with `hc get <address> --json`, then launch Ghostty with a window matching the task's `cols` and `rows`. Wait for the terminal's PTY size to stabilize before launching `hc attach --history <lines> <address>` so the initial render uses the final window dimensions. Request all available history.
 - A finished task opens its final screen with `hc read <address>` through `less -S` so long lines preserve their original width. The terminal process must ignore task input. Do not call `attach` for finished tasks because Herdr Core rejects it.
 - A finished task's submenu must offer **View Final Screen** and **Remove Task**. Remove only finished tasks, using `hc rm <address>`.
+- Every task's submenu must offer **Rename Task…**. Herdr Core does not provide a terminal rename operation, so persist a Herdrker-local display alias by terminal address. An empty alias resets the display to Herdr Core's original name, title, or address.
 - Display task state clearly. Treat Herdr's `finished` state as stopped.
 
 ### Hosts
