@@ -29,8 +29,9 @@ and remove a stopped task. Leaving a task's command blank starts the selected
 host's login shell; local tasks default to the user's home directory.
 Creating a task opens its terminal and attaches to it automatically.
 The first 10 tasks in menu order receive `Command+Option+1…9` and
-`Command+Option+0`. The **Assign Hotkey** submenu shows the same automatic
-order. A shortcut focuses the task's existing tracked window or opens it.
+`Command+Option+0`. Use **Assign Hotkey…** to press and set another modifier
+prefix such as `Command+Control`. A shortcut focuses the task's existing
+tracked window or opens it.
 
 Herdr Core keeps 5 MiB of scrollback per live terminal by default. Set
 `history_mb` in `~/.config/herdr-core/config.toml` to change that byte budget.

@@ -45,12 +45,63 @@ private final class TaskMenuPayload: NSObject {
 }
 
 @MainActor
+private final class HotkeyRecorder: NSObject {
+    let label: NSTextField
+    private(set) var prefix: HotkeyPrefix
+    private var timer: Timer?
+    private var pendingPeak: HotkeyPrefix?
+
+    init(initialPrefix: HotkeyPrefix) {
+        self.prefix = initialPrefix
+        self.label = NSTextField(labelWithString: initialPrefix.display)
+        super.init()
+        label.font = .monospacedSystemFont(ofSize: 28, weight: .semibold)
+        label.alignment = .center
+        label.frame = NSRect(x: 0, y: 0, width: 340, height: 42)
+    }
+
+    func start() {
+        timer = Timer(
+            timeInterval: 0.05,
+            target: self,
+            selector: #selector(pollModifiers),
+            userInfo: nil,
+            repeats: true
+        )
+        if let timer {
+            RunLoop.main.add(timer, forMode: .modalPanel)
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    @objc private func pollModifiers() {
+        let pressed = HotkeyPrefix.from(eventFlags: NSEvent.modifierFlags)
+        if pressed.isValid {
+            if pendingPeak == nil
+                || pressed.modifierCount >= pendingPeak!.modifierCount {
+                pendingPeak = pressed
+                label.stringValue = pressed.display
+            }
+        } else if let pendingPeak {
+            prefix = pendingPeak
+            self.pendingPeak = nil
+        }
+    }
+}
+
+@MainActor
 final class StatusMenuController: NSObject, NSMenuDelegate {
     private let client: any HerdrCoreProviding
     private let terminalLauncher: TerminalLauncher
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private let herdrIcon: NSImage?
+    private let hotkeyStore: HotkeyPrefixStore
+    private var hotkeyPrefix: HotkeyPrefix
 
     private var hosts: [HerdrHost] = []
     private var tasks: [HerdrTask] = []
@@ -72,6 +123,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             withLength: NSStatusItem.variableLength
         )
         self.herdrIcon = Self.loadHerdrIcon()
+        self.hotkeyStore = HotkeyPrefixStore()
+        self.hotkeyPrefix = HotkeyPrefixStore().load()
         super.init()
 
         menu.delegate = self
@@ -179,11 +232,15 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
         if !shortcutTasks.isEmpty {
             let assignItem = NSMenuItem(
-                title: "Assign Hotkey",
-                action: nil,
+                title: "Assign Hotkey… (\(hotkeyPrefix.display))",
+                action: #selector(assignHotKey),
                 keyEquivalent: ""
             )
-            assignItem.submenu = hotkeyMenu()
+            assignItem.target = self
+            assignItem.image = NSImage(
+                systemSymbolName: "keyboard",
+                accessibilityDescription: "Assign hotkey"
+            )
             menu.addItem(assignItem)
         }
 
@@ -246,7 +303,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             )
             if let index = shortcutIndex(for: task) {
                 item.keyEquivalent = index == 9 ? "0" : String(index + 1)
-                item.keyEquivalentModifierMask = [.command, .option]
+                item.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
             }
             let payload = TaskMenuPayload(task: task)
             item.representedObject = payload
@@ -535,23 +592,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         shortcutTasks.firstIndex(where: { $0.address == task.address })
     }
 
-    private func hotkeyMenu() -> NSMenu {
-        let submenu = NSMenu(title: "Assign Hotkey")
-        submenu.autoenablesItems = false
-        for (index, task) in shortcutTasks.enumerated() {
-            let item = NSMenuItem(
-                title: "\(task.displayName) — \(task.stateLabel)",
-                action: #selector(openTask(_:)),
-                keyEquivalent: index == 9 ? "0" : String(index + 1)
-            )
-            item.keyEquivalentModifierMask = [.command, .option]
-            item.target = self
-            item.representedObject = TaskMenuPayload(task: task)
-            submenu.addItem(item)
-        }
-        return submenu
-    }
-
     fileprivate func handleGlobalHotKey(id: UInt32) {
         let index = Int(id) - 1
         guard shortcutTasks.indices.contains(index) else {
@@ -560,9 +600,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         activateTask(shortcutTasks[index])
     }
 
-    private func registerGlobalHotKeys() {
+    @discardableResult
+    private func registerGlobalHotKeys() -> Int {
         guard hotKeyRefs.isEmpty else {
-            return
+            return hotKeyRefs.count
         }
 
         var eventType = EventTypeSpec(
@@ -578,11 +619,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             &hotKeyEventHandler
         )
         guard handlerStatus == noErr else {
-            return
+            return 0
         }
 
         let keyCodes: [UInt32] = [18, 19, 20, 21, 23, 22, 26, 28, 25, 29]
-        let modifiers = UInt32(cmdKey | optionKey)
+        let modifiers = hotkeyPrefix.carbonModifiers
         for (index, keyCode) in keyCodes.enumerated() {
             var hotKeyRef: EventHotKeyRef?
             let hotKeyID = EventHotKeyID(
@@ -601,6 +642,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 hotKeyRefs.append(hotKeyRef)
             }
         }
+        return hotKeyRefs.count
     }
 
     private func unregisterGlobalHotKeys() {
@@ -611,6 +653,38 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         if let hotKeyEventHandler {
             RemoveEventHandler(hotKeyEventHandler)
             self.hotKeyEventHandler = nil
+        }
+    }
+
+    @objc private func assignHotKey() {
+        let recorder = HotkeyRecorder(initialPrefix: hotkeyPrefix)
+
+        let alert = NSAlert()
+        alert.messageText = "Assign Hotkey Prefix"
+        alert.informativeText =
+            "Press a modifier combination such as Command+Option, Command+Control, or Command+Control+Option."
+        alert.addButton(withTitle: "Assign")
+        alert.addButton(withTitle: "Cancel")
+        alert.accessoryView = recorder.label
+        recorder.start()
+        defer { recorder.stop() }
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        hotkeyPrefix = recorder.prefix
+        hotkeyStore.save(recorder.prefix)
+        unregisterGlobalHotKeys()
+        let registered = registerGlobalHotKeys()
+        rebuildMenu()
+
+        if registered < 10 {
+            let warning = NSAlert()
+            warning.messageText = "Some hotkeys are unavailable"
+            warning.informativeText =
+                "Only \(registered) of 10 global shortcuts could be registered. Another application or macOS may be using this combination."
+            warning.runModal()
         }
     }
 }
