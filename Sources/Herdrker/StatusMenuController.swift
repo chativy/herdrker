@@ -16,7 +16,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private let herdrIcon: NSImage?
-    private let aliases = TaskAliasStore()
 
     private var hosts: [HerdrHost] = []
     private var tasks: [HerdrTask] = []
@@ -191,26 +190,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
 
         for task in group.tasks {
-            let displayName = aliases.alias(for: task.address) ?? task.displayName
             let item = NSMenuItem(
-                title: "\(displayName) — \(task.stateLabel)",
+                title: "\(task.displayName) — \(task.stateLabel)",
                 action: nil,
                 keyEquivalent: ""
             )
             let payload = TaskMenuPayload(task: task)
             item.representedObject = payload
-            item.image = NSImage(
-                systemSymbolName: task.isFinished
-                    ? "stop.circle.fill"
-                    : task.status == "blocked"
-                        ? "exclamationmark.circle.fill"
-                        : "circle.fill",
-                accessibilityDescription: task.stateLabel
-            )
-
-            let actions = NSMenu(title: displayName)
 
             if task.isFinished {
+                item.image = NSImage(
+                    systemSymbolName: "stop.circle.fill",
+                    accessibilityDescription: "Stopped"
+                )
+                let actions = NSMenu(title: task.displayName)
                 let viewItem = NSMenuItem(
                     title: "View Final Screen",
                     action: #selector(openTask(_:)),
@@ -219,28 +212,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 viewItem.target = self
                 viewItem.representedObject = payload
                 actions.addItem(viewItem)
-            } else {
-                let attachItem = NSMenuItem(
-                    title: "Attach",
-                    action: #selector(openTask(_:)),
-                    keyEquivalent: ""
-                )
-                attachItem.target = self
-                attachItem.representedObject = payload
-                actions.addItem(attachItem)
-            }
 
-            let renameItem = NSMenuItem(
-                title: "Rename Task…",
-                action: #selector(renameTask(_:)),
-                keyEquivalent: ""
-            )
-            renameItem.target = self
-            renameItem.representedObject = payload
-            actions.addItem(renameItem)
-
-            if task.isFinished {
-                actions.addItem(.separator())
                 let removeItem = NSMenuItem(
                     title: "Remove Task",
                     action: #selector(confirmRemoveTask(_:)),
@@ -249,9 +221,17 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 removeItem.target = self
                 removeItem.representedObject = payload
                 actions.addItem(removeItem)
+                item.submenu = actions
+            } else {
+                item.action = #selector(openTask(_:))
+                item.target = self
+                item.image = NSImage(
+                    systemSymbolName: task.status == "blocked"
+                        ? "exclamationmark.circle.fill"
+                        : "circle.fill",
+                    accessibilityDescription: task.stateLabel
+                )
             }
-
-            item.submenu = actions
             submenu.addItem(item)
         }
         return submenu
@@ -334,32 +314,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         (sender.representedObject as? TaskMenuPayload)?.task
     }
 
-    @objc private func renameTask(_ sender: NSMenuItem) {
-        guard let task = task(from: sender) else {
-            return
-        }
-
-        let alert = NSAlert()
-        alert.messageText = "Rename Task"
-        alert.informativeText = "Leave blank to use the task's original name."
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-
-        let field = NSTextField(
-            string: aliases.alias(for: task.address) ?? task.displayName
-        )
-        field.placeholderString = "Task name"
-        field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
-        alert.accessoryView = field
-
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            return
-        }
-
-        aliases.setAlias(field.stringValue, for: task.address)
-        rebuildMenu()
-    }
-
     @objc private func openTask(_ sender: NSMenuItem) {
         guard let task = task(from: sender) else {
             return
@@ -402,7 +356,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             }
             do {
                 try await client.removeTask(address: task.address)
-                aliases.removeAlias(for: task.address)
                 await refresh()
             } catch {
                 showError(error)

@@ -27,8 +27,6 @@ The status icon displays a red dot whenever Herdr Core has at least one task.
 Open the menu to create a task, add an SSH host, attach to a live task, or view
 and remove a stopped task. Leaving a task's command blank starts the selected
 host's login shell; local tasks default to the user's home directory.
-Each task's submenu includes **Rename Task…** for setting a Herdrker-local
-display name.
 
 Herdr Core keeps 5 MiB of scrollback per live terminal by default. Set
 `history_mb` in `~/.config/herdr-core/config.toml` to change that byte budget.
