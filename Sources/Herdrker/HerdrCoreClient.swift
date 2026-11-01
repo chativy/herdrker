@@ -44,11 +44,6 @@ struct HerdrCoreError: LocalizedError, Sendable {
 }
 
 enum HerdrCoreCommand: Equatable {
-    static let loginShellCommand = """
-    if [ -z "${TERM:-}" ] || [ "$TERM" = "dumb" ]; then export TERM=xterm-256color; fi; \
-    export CLICOLOR=1; exec "${SHELL:-/bin/sh}" -l
-    """
-
     case listTasks
     case listHosts
     case task(String)
@@ -75,10 +70,9 @@ enum HerdrCoreCommand: Equatable {
             if let workingDirectory = request.workingDirectory {
                 arguments.append(contentsOf: ["--cwd", workingDirectory])
             }
-            arguments.append(contentsOf: [
-                "--",
-                request.command ?? HerdrCoreCommand.loginShellCommand
-            ])
+            if let command = request.command {
+                arguments.append(contentsOf: ["--", command])
+            }
             return arguments
         case let .addHost(request):
             var arguments = ["machine", "add", "--json"]
