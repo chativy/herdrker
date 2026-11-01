@@ -99,7 +99,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private func rebuildMenu() {
         menu.removeAllItems()
 
-        if let loadError {
+        if loadError != nil {
             let errorItem = NSMenuItem(
                 title: "Herdr Core unavailable",
                 action: nil,
@@ -109,7 +109,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 systemSymbolName: "exclamationmark.triangle.fill",
                 accessibilityDescription: "Error"
             )
-            errorItem.toolTip = loadError
             menu.addItem(errorItem)
             menu.addItem(.separator())
         }
@@ -189,7 +188,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             )
             let payload = TaskMenuPayload(task: task)
             item.representedObject = payload
-            item.toolTip = task.address
 
             if task.isFinished {
                 item.image = NSImage(
