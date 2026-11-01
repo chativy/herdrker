@@ -12,6 +12,7 @@ struct NewTaskDialog: View {
     @State private var command = ""
     @State private var workingDirectory = ""
     @State private var validationError: String?
+    @FocusState private var taskNameFocused: Bool
 
     init(
         hosts: [HerdrHost],
@@ -49,6 +50,7 @@ struct NewTaskDialog: View {
                     TextField("Optional", text: $taskName)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 300)
+                        .focused($taskNameFocused)
                 }
                 GridRow {
                     Text("Working directory")
@@ -86,6 +88,9 @@ struct NewTaskDialog: View {
         }
         .padding(24)
         .frame(width: 460)
+        .onAppear {
+            taskNameFocused = true
+        }
         .onExitCommand(perform: onCancel)
     }
 
