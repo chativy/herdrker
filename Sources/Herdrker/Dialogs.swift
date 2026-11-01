@@ -31,17 +31,44 @@ struct NewTaskDialog: View {
             Text("Start a persistent shell command through Herdr Core.")
                 .foregroundStyle(.secondary)
 
-            Form {
-                Picker("Host", selection: $selectedHostID) {
-                    ForEach(hosts) { host in
-                        Text(host.displayName).tag(host.id)
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
+                GridRow {
+                    Text("Host")
+                        .frame(width: 120, alignment: .trailing)
+                    Picker("Host", selection: $selectedHostID) {
+                        ForEach(hosts) { host in
+                            Text(host.displayName).tag(host.id)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(width: 300)
                 }
-                TextField("Task name (optional)", text: $taskName)
-                TextField("Command (blank uses your default shell)", text: $command)
-                TextField("Working directory (optional)", text: $workingDirectory)
+                GridRow {
+                    Text("Task name")
+                        .frame(width: 120, alignment: .trailing)
+                    TextField("Optional", text: $taskName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 300)
+                }
+                GridRow {
+                    Text("Working directory")
+                        .frame(width: 120, alignment: .trailing)
+                    TextField("Optional", text: $workingDirectory)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 300)
+                }
+                GridRow {
+                    Text("Command")
+                        .frame(width: 120, alignment: .trailing)
+                    TextField("Optional", text: $command)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 300)
+                }
             }
-            .formStyle(.grouped)
+
+            Text("Leave Command blank to start the host's login shell. A blank local Working directory starts in your home folder.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if let validationError {
                 Text(validationError)
@@ -66,12 +93,20 @@ struct NewTaskDialog: View {
         let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedName = taskName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDirectory = workingDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedDirectory: String?
+        if !trimmedDirectory.isEmpty {
+            resolvedDirectory = trimmedDirectory
+        } else {
+            resolvedDirectory = HerdrModel.defaultWorkingDirectory(
+                hostID: selectedHostID
+            )
+        }
         onSubmit(
             NewTaskRequest(
                 host: selectedHostID == HerdrModel.localHostID ? nil : selectedHostID,
                 name: trimmedName.isEmpty ? nil : trimmedName,
                 command: trimmedCommand.isEmpty ? nil : trimmedCommand,
-                workingDirectory: trimmedDirectory.isEmpty ? nil : trimmedDirectory
+                workingDirectory: resolvedDirectory
             )
         )
     }
@@ -150,7 +185,15 @@ final class DialogWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
         window.title = title
-        window.contentViewController = NSHostingController(rootView: rootView)
+        let hostingController = NSHostingController(rootView: rootView)
+        let fittingSize = hostingController.view.fittingSize
+        window.contentViewController = hostingController
+        window.setContentSize(
+            NSSize(
+                width: max(size.width, fittingSize.width),
+                height: max(size.height, fittingSize.height)
+            )
+        )
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self

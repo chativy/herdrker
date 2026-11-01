@@ -131,6 +131,13 @@ enum HerdrModel {
         }
     }
 
+    static func defaultWorkingDirectory(
+        hostID: String,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> String? {
+        hostID == localHostID ? homeDirectory.path : nil
+    }
+
     private static func taskOrder(_ lhs: HerdrTask, _ rhs: HerdrTask) -> Bool {
         if lhs.isFinished != rhs.isFinished {
             return !lhs.isFinished

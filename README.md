@@ -26,4 +26,4 @@ signed with a valid local Apple Development identity. Set
 The status icon displays a red dot whenever Herdr Core has at least one task.
 Open the menu to create a task, add an SSH host, attach to a live task, or view
 and remove a stopped task. Leaving a task's command blank starts the selected
-host's default shell.
+host's login shell; local tasks default to the user's home directory.

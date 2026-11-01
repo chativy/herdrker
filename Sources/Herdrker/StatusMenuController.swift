@@ -367,7 +367,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         )
         presentDialog(
             title: "Herdrker — New Task",
-            size: NSSize(width: 460, height: 390),
+            size: NSSize(width: 520, height: 420),
             rootView: AnyView(rootView)
         )
     }
@@ -384,7 +384,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         )
         presentDialog(
             title: "Herdrker — Add Host",
-            size: NSSize(width: 460, height: 360),
+            size: NSSize(width: 520, height: 370),
             rootView: AnyView(rootView)
         )
     }

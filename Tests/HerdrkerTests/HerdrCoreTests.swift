@@ -127,4 +127,22 @@ final class HerdrCoreTests: XCTestCase {
             ["get", "t2", "--json"]
         )
     }
+
+    func testLocalDefaultWorkingDirectoryIsHome() {
+        let home = URL(fileURLWithPath: "/Users/example")
+
+        XCTAssertEqual(
+            HerdrModel.defaultWorkingDirectory(
+                hostID: HerdrModel.localHostID,
+                homeDirectory: home
+            ),
+            "/Users/example"
+        )
+        XCTAssertNil(
+            HerdrModel.defaultWorkingDirectory(
+                hostID: "remote",
+                homeDirectory: home
+            )
+        )
+    }
 }
