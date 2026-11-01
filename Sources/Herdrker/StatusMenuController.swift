@@ -1,5 +1,40 @@
 import AppKit
+import Carbon
 import SwiftUI
+
+private let herdrkerHotKeySignature: OSType = 0x4852444B
+
+private func herdrkerHotKeyHandler(
+    _ nextHandler: EventHandlerCallRef?,
+    _ event: EventRef?,
+    _ userData: UnsafeMutableRawPointer?
+) -> OSStatus {
+    guard let event, let userData else {
+        return OSStatus(eventNotHandledErr)
+    }
+
+    var hotKeyID = EventHotKeyID()
+    let status = GetEventParameter(
+        event,
+        EventParamName(kEventParamDirectObject),
+        EventParamType(typeEventHotKeyID),
+        nil,
+        MemoryLayout<EventHotKeyID>.size,
+        nil,
+        &hotKeyID
+    )
+    guard status == noErr, hotKeyID.signature == herdrkerHotKeySignature else {
+        return OSStatus(eventNotHandledErr)
+    }
+
+    let controller = Unmanaged<StatusMenuController>
+        .fromOpaque(userData)
+        .takeUnretainedValue()
+    Task { @MainActor in
+        controller.handleGlobalHotKey(id: hotKeyID.id)
+    }
+    return noErr
+}
 
 private final class TaskMenuPayload: NSObject {
     let task: HerdrTask
@@ -24,6 +59,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private var isMenuOpen = false
     private var refreshLoop: Task<Void, Never>?
     private var activeDialog: DialogWindowController?
+    private var hotKeyRefs: [EventHotKeyRef] = []
+    private var hotKeyEventHandler: EventHandlerRef?
 
     init(
         client: any HerdrCoreProviding,
@@ -48,6 +85,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     func start() {
+        registerGlobalHotKeys()
         refreshLoop?.cancel()
         refreshLoop = Task { [weak self] in
             await self?.refresh()
@@ -64,6 +102,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     func stop() {
         refreshLoop?.cancel()
         refreshLoop = nil
+        unregisterGlobalHotKeys()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -138,6 +177,16 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        if !shortcutTasks.isEmpty {
+            let assignItem = NSMenuItem(
+                title: "Assign Hotkey",
+                action: nil,
+                keyEquivalent: ""
+            )
+            assignItem.submenu = hotkeyMenu()
+            menu.addItem(assignItem)
+        }
+
         let newTaskItem = NSMenuItem(
             title: "New Task…",
             action: #selector(showNewTask),
@@ -195,6 +244,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 action: nil,
                 keyEquivalent: ""
             )
+            if let index = shortcutIndex(for: task) {
+                item.keyEquivalent = index == 9 ? "0" : String(index + 1)
+                item.keyEquivalentModifierMask = [.command, .option]
+            }
             let payload = TaskMenuPayload(task: task)
             item.representedObject = payload
 
@@ -318,13 +371,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         guard let task = task(from: sender) else {
             return
         }
+        activateTask(task)
+    }
+
+    private func activateTask(_ task: HerdrTask) {
+        if terminalLauncher.focus(taskAddress: task.address) {
+            return
+        }
         Task { [weak self] in
             guard let self else {
                 return
             }
             do {
                 let detailedTask = try await client.task(address: task.address)
-                try terminalLauncher.open(
+                try await terminalLauncher.open(
                     task: detailedTask,
                     coreExecutableURL: client.executableURL
                 )
@@ -427,7 +487,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 )
                 await refresh()
                 let detailedTask = try await client.task(address: createdTask.address)
-                try terminalLauncher.open(
+                try await terminalLauncher.open(
                     task: detailedTask,
                     coreExecutableURL: client.executableURL
                 )
@@ -465,5 +525,92 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     @objc private func quitApplication() {
         NSApplication.shared.terminate(nil)
+    }
+
+    private var shortcutTasks: [HerdrTask] {
+        Array(groups.flatMap(\.tasks).prefix(10))
+    }
+
+    private func shortcutIndex(for task: HerdrTask) -> Int? {
+        shortcutTasks.firstIndex(where: { $0.address == task.address })
+    }
+
+    private func hotkeyMenu() -> NSMenu {
+        let submenu = NSMenu(title: "Assign Hotkey")
+        submenu.autoenablesItems = false
+        for (index, task) in shortcutTasks.enumerated() {
+            let item = NSMenuItem(
+                title: "\(task.displayName) — \(task.stateLabel)",
+                action: #selector(openTask(_:)),
+                keyEquivalent: index == 9 ? "0" : String(index + 1)
+            )
+            item.keyEquivalentModifierMask = [.command, .option]
+            item.target = self
+            item.representedObject = TaskMenuPayload(task: task)
+            submenu.addItem(item)
+        }
+        return submenu
+    }
+
+    fileprivate func handleGlobalHotKey(id: UInt32) {
+        let index = Int(id) - 1
+        guard shortcutTasks.indices.contains(index) else {
+            return
+        }
+        activateTask(shortcutTasks[index])
+    }
+
+    private func registerGlobalHotKeys() {
+        guard hotKeyRefs.isEmpty else {
+            return
+        }
+
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            herdrkerHotKeyHandler,
+            1,
+            &eventType,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &hotKeyEventHandler
+        )
+        guard handlerStatus == noErr else {
+            return
+        }
+
+        let keyCodes: [UInt32] = [18, 19, 20, 21, 23, 22, 26, 28, 25, 29]
+        let modifiers = UInt32(cmdKey | optionKey)
+        for (index, keyCode) in keyCodes.enumerated() {
+            var hotKeyRef: EventHotKeyRef?
+            let hotKeyID = EventHotKeyID(
+                signature: herdrkerHotKeySignature,
+                id: UInt32(index + 1)
+            )
+            let status = RegisterEventHotKey(
+                keyCode,
+                modifiers,
+                hotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &hotKeyRef
+            )
+            if status == noErr, let hotKeyRef {
+                hotKeyRefs.append(hotKeyRef)
+            }
+        }
+    }
+
+    private func unregisterGlobalHotKeys() {
+        for hotKeyRef in hotKeyRefs {
+            UnregisterEventHotKey(hotKeyRef)
+        }
+        hotKeyRefs.removeAll()
+        if let hotKeyEventHandler {
+            RemoveEventHandler(hotKeyEventHandler)
+            self.hotKeyEventHandler = nil
+        }
     }
 }
