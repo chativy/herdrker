@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 import Foundation
 
 @MainActor
@@ -7,7 +6,7 @@ final class TerminalLauncher {
     nonisolated static let allStoredHistoryLines = String(Int.max)
 
     private enum WindowTarget {
-        case ghostty(pid_t)
+        case ghostty(windowID: String)
         case terminal(windowID: Int)
     }
 
@@ -84,8 +83,8 @@ final class TerminalLauncher {
 
         let focused: Bool
         switch target {
-        case let .ghostty(pid):
-            focused = focusGhostty(pid: pid)
+        case let .ghostty(windowID):
+            focused = focusGhostty(windowID: windowID)
         case let .terminal(windowID):
             focused = focusTerminal(windowID: windowID)
         }
@@ -159,67 +158,60 @@ final class TerminalLauncher {
         executableURL: URL,
         arguments: [String]
     ) async throws {
-        var ghosttyArguments = ["-na", ghosttyApplicationURL.path, "--args"]
-        if let cols = task.cols, let rows = task.rows {
-            ghosttyArguments.append(contentsOf: [
-                "--window-width=\(cols)",
-                "--window-height=\(rows)"
-            ])
-        }
-        ghosttyArguments.append(contentsOf: ["-e", executableURL.path])
-        ghosttyArguments.append(contentsOf: arguments)
-
-        let existingPIDs = Set(runningGhosttyApplications().map(\.processIdentifier))
-        _ = try runProcess(
-            executableURL: URL(fileURLWithPath: "/usr/bin/open"),
-            arguments: ghosttyArguments,
+        let command = Self.shellCommand(
+            executableURL: executableURL,
+            arguments: arguments
+        )
+        let script = """
+        on run argv
+            tell application "Ghostty"
+                set cfg to new surface configuration
+                set command of cfg to (item 1 of argv)
+                set newWindow to new window with configuration cfg
+                activate window newWindow
+                return id of newWindow
+            end tell
+        end run
+        """
+        let output = try runProcess(
+            executableURL: URL(fileURLWithPath: "/usr/bin/osascript"),
+            arguments: ["-e", script, "--", command],
             failureMessage: "Ghostty could not open the task."
         )
-
-        for _ in 0..<40 {
-            let newProcess = runningGhosttyApplications().first {
-                !existingPIDs.contains($0.processIdentifier)
-            }
-            if let newProcess {
-                windowTargets[task.address] = .ghostty(newProcess.processIdentifier)
-                return
-            }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        let windowID = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !windowID.isEmpty else {
+            throw HerdrCoreError(
+                kind: "terminal_launch_failed",
+                message: "Ghostty did not return a window identifier.",
+                hint: nil
+            )
         }
-
-        throw HerdrCoreError(
-            kind: "terminal_launch_failed",
-            message: "Ghostty opened, but its window could not be tracked.",
-            hint: "Restart Ghostty and try again."
-        )
+        windowTargets[task.address] = .ghostty(windowID: windowID)
     }
 
-    private func focusGhostty(pid: pid_t) -> Bool {
-        guard let application = NSRunningApplication(processIdentifier: pid),
-              !application.isTerminated,
-              windowExists(for: pid) else {
+    private func focusGhostty(windowID: String) -> Bool {
+        let script = """
+        on run argv
+            tell application "Ghostty"
+                try
+                    set targetWindow to first window whose id is (item 1 of argv)
+                    activate window targetWindow
+                    return "focused"
+                on error
+                    return "missing"
+                end try
+            end tell
+        end run
+        """
+        do {
+            let output = try runProcess(
+                executableURL: URL(fileURLWithPath: "/usr/bin/osascript"),
+                arguments: ["-e", script, "--", windowID],
+                failureMessage: "Ghostty could not focus the task."
+            )
+            return output.trimmingCharacters(in: .whitespacesAndNewlines) == "focused"
+        } catch {
             return false
-        }
-        return application.activate(options: [.activateAllWindows])
-    }
-
-    private func runningGhosttyApplications() -> [NSRunningApplication] {
-        let bundleIdentifier =
-            Bundle(url: ghosttyApplicationURL)?.bundleIdentifier
-            ?? "com.mitchellh.ghostty"
-        return NSRunningApplication.runningApplications(
-            withBundleIdentifier: bundleIdentifier
-        )
-    }
-
-    private func windowExists(for pid: pid_t) -> Bool {
-        let windows = CGWindowListCopyWindowInfo(
-            .optionAll,
-            kCGNullWindowID
-        ) as? [[String: Any]] ?? []
-        return windows.contains {
-            ($0[kCGWindowOwnerPID as String] as? pid_t) == pid
-                && ($0[kCGWindowLayer as String] as? Int) == 0
         }
     }
 

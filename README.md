@@ -69,6 +69,8 @@ Herdrker does not add a copy-mode layer. Herdr Core owns task lifecycle and
 scrollback, while Ghostty or Terminal provides the visible window and native
 selection behavior. Closing or reopening a viewer does not restart the task.
 Herdrker still respects mouse-reporting modes requested by full-screen programs.
+All Ghostty task windows are created inside the existing Ghostty application
+instance, so macOS shows one Ghostty icon in the Dock and application switcher.
 
 ## Scrollback Behavior
 
