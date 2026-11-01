@@ -1,6 +1,7 @@
 import Foundation
 
 struct TerminalLauncher: Sendable {
+    static let allStoredHistoryLines = String(Int.max)
     private let ghosttyApplicationURL: URL
 
     init(
@@ -34,7 +35,7 @@ struct TerminalLauncher: Sendable {
     }
 
     static func liveAttachArguments(for task: HerdrTask) -> [String] {
-        return ["attach", "--history", "1000", task.address]
+        return ["attach", "--history", allStoredHistoryLines, task.address]
     }
 
     static func readOnlyCommand(executableURL: URL, address: String) -> String {
@@ -53,7 +54,7 @@ struct TerminalLauncher: Sendable {
     static func liveAttachCommand(executableURL: URL, address: String) -> String {
         let attachCommand = shellCommand(
             executableURL: executableURL,
-            arguments: ["attach", "--history", "1000", address]
+            arguments: ["attach", "--history", allStoredHistoryLines, address]
         )
         return "\(waitForStableTerminalSize) exec \(attachCommand)"
     }

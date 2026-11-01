@@ -18,7 +18,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 
 - A task dialog must let the user choose a host and enter an optional task name, shell command, and working directory. When the command is blank, start that host's login shell. Default a local task with no working directory to the user's home folder. Create the task with `hc run --bg --no-parent`, passing `--on <host>` for remote hosts.
 - A live task opens interactively in Ghostty when installed at `/Applications/Ghostty.app`; otherwise, open Terminal.
-- Resolve the selected task with `hc get <address> --json`, then launch Ghostty with a window matching the task's `cols` and `rows`. Wait for the terminal's PTY size to stabilize before launching `hc attach --history <lines> <address>` so the initial render uses the final window dimensions.
+- Resolve the selected task with `hc get <address> --json`, then launch Ghostty with a window matching the task's `cols` and `rows`. Wait for the terminal's PTY size to stabilize before launching `hc attach --history <lines> <address>` so the initial render uses the final window dimensions. Request all available history.
 - A finished task opens its final screen with `hc read <address>` through `less -S` so long lines preserve their original width. The terminal process must ignore task input. Do not call `attach` for finished tasks because Herdr Core rejects it.
 - A finished task's submenu must offer **View Final Screen** and **Remove Task**. Remove only finished tasks, using `hc rm <address>`.
 - Display task state clearly. Treat Herdr's `finished` state as stopped.
@@ -58,8 +58,10 @@ Use four-space Swift indentation, standard Swift API naming, small focused types
 
 ## Commit & Pull Request Guidelines
 
-No Git history is available yet. Use concise imperative commit subjects such as `Add task creation dialog`. Pull requests should summarize behavior, list verification commands, link related issues, and include screenshots for menu or dialog changes.
+Use concise imperative commit subjects such as `Add task creation dialog`, matching the existing history. Pull requests should summarize behavior, list verification commands, link related issues, and include screenshots for menu or dialog changes.
 
 ## Security & Configuration
 
 Do not commit credentials, SSH keys, logs, build products, or machine-specific configuration. Depend on the user's existing SSH configuration and Keychain/agent setup.
+
+Herdr Core retains 5 MiB of scrollback per live terminal by default. Its `history_mb` setting changes this byte budget for newly created terminals; terminal-created existing history is not expanded retroactively.

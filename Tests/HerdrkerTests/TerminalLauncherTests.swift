@@ -15,7 +15,7 @@ final class TerminalLauncherTests: XCTestCase {
 
         XCTAssertEqual(
             TerminalLauncher.liveAttachArguments(for: live),
-            ["attach", "--history", "1000", "t3"]
+            ["attach", "--history", TerminalLauncher.allStoredHistoryLines, "t3"]
         )
     }
 
@@ -38,7 +38,11 @@ final class TerminalLauncherTests: XCTestCase {
         )
 
         XCTAssertTrue(command.contains("stty size"))
-        XCTAssertTrue(command.contains("'attach' '--history' '1000' 't2'"))
+        XCTAssertTrue(
+            command.contains(
+                "'attach' '--history' '\(TerminalLauncher.allStoredHistoryLines)' 't2'"
+            )
+        )
     }
 
     func testShellCommandQuotesSingleQuotes() {
