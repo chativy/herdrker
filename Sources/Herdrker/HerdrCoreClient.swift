@@ -6,7 +6,7 @@ protocol HerdrCoreProviding: Sendable {
     func listTasks() async throws -> [HerdrTask]
     func listHosts() async throws -> [HerdrHost]
     func task(address: String) async throws -> HerdrTask
-    func createTask(_ request: NewTaskRequest) async throws
+    func createTask(_ request: NewTaskRequest) async throws -> HerdrTask
     func addHost(_ request: NewHostRequest) async throws
     func removeTask(address: String) async throws
 }
@@ -44,6 +44,11 @@ struct HerdrCoreError: LocalizedError, Sendable {
 }
 
 enum HerdrCoreCommand: Equatable {
+    static let loginShellCommand = """
+    if [ -z "${TERM:-}" ] || [ "$TERM" = "dumb" ]; then export TERM=xterm-256color; fi; \
+    export CLICOLOR=1; exec "${SHELL:-/bin/sh}" -l
+    """
+
     case listTasks
     case listHosts
     case task(String)
@@ -60,7 +65,7 @@ enum HerdrCoreCommand: Equatable {
         case let .task(address):
             return ["get", address, "--json"]
         case let .createTask(request):
-            var arguments = ["run", "--bg", "--no-parent"]
+            var arguments = ["run", "--bg", "--no-parent", "--json"]
             if let host = request.host {
                 arguments.append(contentsOf: ["--on", host])
             }
@@ -70,9 +75,10 @@ enum HerdrCoreCommand: Equatable {
             if let workingDirectory = request.workingDirectory {
                 arguments.append(contentsOf: ["--cwd", workingDirectory])
             }
-            if let command = request.command {
-                arguments.append(contentsOf: ["--", command])
-            }
+            arguments.append(contentsOf: [
+                "--",
+                request.command ?? HerdrCoreCommand.loginShellCommand
+            ])
             return arguments
         case let .addHost(request):
             var arguments = ["machine", "add", "--json"]
@@ -113,8 +119,8 @@ final class HerdrCoreClient: HerdrCoreProviding, Sendable {
         try HerdrJSON.task(from: await output(for: .task(address)))
     }
 
-    func createTask(_ request: NewTaskRequest) async throws {
-        _ = try await output(for: .createTask(request))
+    func createTask(_ request: NewTaskRequest) async throws -> HerdrTask {
+        try HerdrJSON.task(from: await output(for: .createTask(request)))
     }
 
     func addHost(_ request: NewHostRequest) async throws {

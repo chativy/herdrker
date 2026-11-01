@@ -67,7 +67,7 @@ final class HerdrCoreTests: XCTestCase {
         XCTAssertEqual(
             HerdrCoreCommand.createTask(request).arguments,
             [
-                "run", "--bg", "--no-parent",
+                "run", "--bg", "--no-parent", "--json",
                 "--on", "mini",
                 "--name", "review",
                 "--cwd", "/srv/app",
@@ -104,8 +104,13 @@ final class HerdrCoreTests: XCTestCase {
 
         XCTAssertEqual(
             HerdrCoreCommand.createTask(request).arguments,
-            ["run", "--bg", "--no-parent", "--on", "mini"]
+            [
+                "run", "--bg", "--no-parent", "--json", "--on", "mini",
+                "--", HerdrCoreCommand.loginShellCommand
+            ]
         )
+        XCTAssertTrue(HerdrCoreCommand.loginShellCommand.contains("CLICOLOR=1"))
+        XCTAssertTrue(HerdrCoreCommand.loginShellCommand.contains("-l"))
     }
 
     func testTaskDetailsIncludeTerminalGeometry() throws {
