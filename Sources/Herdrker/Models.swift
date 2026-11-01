@@ -21,6 +21,30 @@ struct HerdrTask: Identifiable, Hashable, Sendable {
     let state: String
     let status: String?
     let createdAt: Date?
+    let cols: Int?
+    let rows: Int?
+
+    init(
+        address: String,
+        name: String?,
+        title: String?,
+        machine: String?,
+        state: String,
+        status: String?,
+        createdAt: Date?,
+        cols: Int? = nil,
+        rows: Int? = nil
+    ) {
+        self.address = address
+        self.name = name
+        self.title = title
+        self.machine = machine
+        self.state = state
+        self.status = status
+        self.createdAt = createdAt
+        self.cols = cols
+        self.rows = rows
+    }
 
     var id: String { address }
     var isFinished: Bool { state == "finished" }
@@ -124,6 +148,18 @@ enum HerdrJSON {
         try records(from: data, preferredKey: "terminals").compactMap(parseTask)
     }
 
+    static func task(from data: Data) throws -> HerdrTask {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let task = parseTask(object) else {
+            throw HerdrCoreError(
+                kind: "invalid_response",
+                message: "herdr-core returned an unexpected task response.",
+                hint: nil
+            )
+        }
+        return task
+    }
+
     static func hostList(from data: Data) throws -> [HerdrHost] {
         try records(from: data, preferredKey: "machines").compactMap(parseHost)
     }
@@ -168,7 +204,9 @@ enum HerdrJSON {
             status: nonemptyString(object["status"]),
             createdAt: createdMilliseconds.map {
                 Date(timeIntervalSince1970: $0 / 1_000)
-            }
+            },
+            cols: integer(object["cols"]),
+            rows: integer(object["rows"])
         )
     }
 
@@ -197,5 +235,12 @@ enum HerdrJSON {
             return number.doubleValue
         }
         return value as? Double
+    }
+
+    private static func integer(_ value: Any?) -> Int? {
+        if let number = value as? NSNumber {
+            return number.intValue
+        }
+        return value as? Int
     }
 }

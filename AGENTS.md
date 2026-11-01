@@ -18,7 +18,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 
 - A task dialog must let the user choose a host and enter an optional task name, shell command, and working directory. When the command is blank, start that host's default user shell. Create the task with `hc run --bg --no-parent`, passing `--on <host>` for remote hosts.
 - A live task opens interactively in Ghostty when installed at `/Applications/Ghostty.app`; otherwise, open Terminal.
-- Launch the selected terminal with `hc attach <address>`.
+- Resolve the selected task with `hc get <address> --json`, then launch Ghostty with a window matching the task's `cols` and `rows`. Launch the terminal with `hc attach <address>`.
 - A finished task opens its final screen with `hc read <address>` in a terminal process that ignores keyboard input. Do not call `attach` for finished tasks because Herdr Core rejects it.
 - A finished task's submenu must offer **View Final Screen** and **Remove Task**. Remove only finished tasks, using `hc rm <address>`.
 - Display task state clearly. Treat Herdr's `finished` state as stopped.

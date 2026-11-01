@@ -5,6 +5,7 @@ protocol HerdrCoreProviding: Sendable {
 
     func listTasks() async throws -> [HerdrTask]
     func listHosts() async throws -> [HerdrHost]
+    func task(address: String) async throws -> HerdrTask
     func createTask(_ request: NewTaskRequest) async throws
     func addHost(_ request: NewHostRequest) async throws
     func removeTask(address: String) async throws
@@ -45,6 +46,7 @@ struct HerdrCoreError: LocalizedError, Sendable {
 enum HerdrCoreCommand: Equatable {
     case listTasks
     case listHosts
+    case task(String)
     case createTask(NewTaskRequest)
     case addHost(NewHostRequest)
     case removeTask(String)
@@ -55,6 +57,8 @@ enum HerdrCoreCommand: Equatable {
             return ["ls", "--all", "--json"]
         case .listHosts:
             return ["machine", "ls", "--json"]
+        case let .task(address):
+            return ["get", address, "--json"]
         case let .createTask(request):
             var arguments = ["run", "--bg", "--no-parent"]
             if let host = request.host {
@@ -103,6 +107,10 @@ final class HerdrCoreClient: HerdrCoreProviding, Sendable {
 
     func listHosts() async throws -> [HerdrHost] {
         try HerdrJSON.hostList(from: await output(for: .listHosts))
+    }
+
+    func task(address: String) async throws -> HerdrTask {
+        try HerdrJSON.task(from: await output(for: .task(address)))
     }
 
     func createTask(_ request: NewTaskRequest) async throws {

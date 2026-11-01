@@ -309,13 +309,19 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         guard let task = task(from: sender) else {
             return
         }
-        do {
-            try terminalLauncher.open(
-                task: task,
-                coreExecutableURL: client.executableURL
-            )
-        } catch {
-            showError(error)
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                let detailedTask = try await client.task(address: task.address)
+                try terminalLauncher.open(
+                    task: detailedTask,
+                    coreExecutableURL: client.executableURL
+                )
+            } catch {
+                showError(error)
+            }
         }
     }
 

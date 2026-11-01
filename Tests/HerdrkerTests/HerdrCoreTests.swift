@@ -107,4 +107,24 @@ final class HerdrCoreTests: XCTestCase {
             ["run", "--bg", "--no-parent", "--on", "mini"]
         )
     }
+
+    func testTaskDetailsIncludeTerminalGeometry() throws {
+        let data = Data("""
+        {
+          "address": "t2",
+          "cols": 200,
+          "rows": 120,
+          "state": "live"
+        }
+        """.utf8)
+
+        let task = try HerdrJSON.task(from: data)
+
+        XCTAssertEqual(task.cols, 200)
+        XCTAssertEqual(task.rows, 120)
+        XCTAssertEqual(
+            HerdrCoreCommand.task("t2").arguments,
+            ["get", "t2", "--json"]
+        )
+    }
 }

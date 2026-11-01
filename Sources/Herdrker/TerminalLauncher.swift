@@ -20,7 +20,11 @@ struct TerminalLauncher: Sendable {
 
         let arguments = Self.liveAttachArguments(for: task)
         if hasGhostty {
-            try openInGhostty(executableURL: coreExecutableURL, arguments: arguments)
+            try openInGhostty(
+                task: task,
+                executableURL: coreExecutableURL,
+                arguments: arguments
+            )
         } else {
             try openInTerminal(
                 command: Self.shellCommand(
@@ -68,6 +72,7 @@ struct TerminalLauncher: Sendable {
         )
         if hasGhostty {
             try openInGhostty(
+                task: task,
                 executableURL: URL(fileURLWithPath: "/bin/zsh"),
                 arguments: ["-lc", command]
             )
@@ -77,16 +82,23 @@ struct TerminalLauncher: Sendable {
     }
 
     private func openInGhostty(
+        task: HerdrTask,
         executableURL: URL,
         arguments: [String]
     ) throws {
+        var ghosttyArguments = ["-na", ghosttyApplicationURL.path, "--args"]
+        if let cols = task.cols, let rows = task.rows {
+            ghosttyArguments.append(contentsOf: [
+                "--window-width=\(cols)",
+                "--window-height=\(rows)"
+            ])
+        }
+        ghosttyArguments.append(contentsOf: ["-e", executableURL.path])
+        ghosttyArguments.append(contentsOf: arguments)
+
         try runProcess(
             executableURL: URL(fileURLWithPath: "/usr/bin/open"),
-            arguments: [
-                "-na", ghosttyApplicationURL.path,
-                "--args", "-e",
-                executableURL.path
-            ] + arguments,
+            arguments: ghosttyArguments,
             failureMessage: "Ghostty could not open the task."
         )
     }
