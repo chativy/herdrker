@@ -25,6 +25,10 @@ final screens.
    viewer does not stop the task; it continues under Herdr Core.
 6. Reopen the task from its host submenu or with its global hotkey.
 
+![Hosts and their task lists in the Herdrker menu](docs/images/tasks-menu-v2.jpg)
+
+![The New Task dialog with host, name, working directory, and command fields](docs/images/new-task.png)
+
 Finished tasks open as read-only final screens. Their submenu also provides
 **Remove Task**; removal is available only for finished tasks.
 
