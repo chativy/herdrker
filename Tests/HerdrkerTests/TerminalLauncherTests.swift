@@ -2,6 +2,17 @@ import XCTest
 @testable import Herdrker
 
 final class TerminalLauncherTests: XCTestCase {
+    func testTaskEnvironmentDescribesTheAttachedTerminal() {
+        let ghostty = TerminalLauncher.taskEnvironment(ghosttyInstalled: true)
+        XCTAssertEqual(ghostty["TERM"], "xterm-256color")
+        XCTAssertEqual(ghostty["TERM_PROGRAM"], "ghostty")
+        XCTAssertEqual(ghostty["COLORTERM"], "truecolor")
+        XCTAssertNil(ghostty["CLICOLOR"])
+
+        let terminal = TerminalLauncher.taskEnvironment(ghosttyInstalled: false)
+        XCTAssertEqual(terminal["TERM_PROGRAM"], "Apple_Terminal")
+    }
+
     func testLiveTaskUsesAttachMode() {
         let live = HerdrTask(
             address: "t3",

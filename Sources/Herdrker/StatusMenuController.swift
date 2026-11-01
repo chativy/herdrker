@@ -421,7 +421,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 return
             }
             do {
-                let createdTask = try await client.createTask(request)
+                let createdTask = try await client.createTask(
+                    request,
+                    environment: terminalLauncher.taskEnvironment
+                )
                 await refresh()
                 let detailedTask = try await client.task(address: createdTask.address)
                 try terminalLauncher.open(

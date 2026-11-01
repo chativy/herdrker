@@ -34,6 +34,18 @@ struct TerminalLauncher: Sendable {
         }
     }
 
+    var taskEnvironment: [String: String] {
+        Self.taskEnvironment(ghosttyInstalled: hasGhostty)
+    }
+
+    static func taskEnvironment(ghosttyInstalled: Bool) -> [String: String] {
+        [
+            "TERM": "xterm-256color",
+            "TERM_PROGRAM": ghosttyInstalled ? "ghostty" : "Apple_Terminal",
+            "COLORTERM": "truecolor"
+        ]
+    }
+
     static func liveAttachArguments(for task: HerdrTask) -> [String] {
         return ["attach", "--history", allStoredHistoryLines, task.address]
     }

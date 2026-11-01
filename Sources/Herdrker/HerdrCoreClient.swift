@@ -6,7 +6,10 @@ protocol HerdrCoreProviding: Sendable {
     func listTasks() async throws -> [HerdrTask]
     func listHosts() async throws -> [HerdrHost]
     func task(address: String) async throws -> HerdrTask
-    func createTask(_ request: NewTaskRequest) async throws -> HerdrTask
+    func createTask(
+        _ request: NewTaskRequest,
+        environment: [String: String]
+    ) async throws -> HerdrTask
     func addHost(_ request: NewHostRequest) async throws
     func removeTask(address: String) async throws
 }
@@ -113,8 +116,16 @@ final class HerdrCoreClient: HerdrCoreProviding, Sendable {
         try HerdrJSON.task(from: await output(for: .task(address)))
     }
 
-    func createTask(_ request: NewTaskRequest) async throws -> HerdrTask {
-        try HerdrJSON.task(from: await output(for: .createTask(request)))
+    func createTask(
+        _ request: NewTaskRequest,
+        environment: [String: String]
+    ) async throws -> HerdrTask {
+        try HerdrJSON.task(
+            from: await output(
+                for: .createTask(request),
+                extraEnvironment: environment
+            )
+        )
     }
 
     func addHost(_ request: NewHostRequest) async throws {
@@ -154,11 +165,18 @@ final class HerdrCoreClient: HerdrCoreProviding, Sendable {
         )
     }
 
-    private func output(for command: HerdrCoreCommand) async throws -> Data {
+    private func output(
+        for command: HerdrCoreCommand,
+        extraEnvironment: [String: String] = [:]
+    ) async throws -> Data {
         let executable = executableURL
         let arguments = command.arguments
         let result = try await Task.detached(priority: .userInitiated) {
-            try Self.runProcess(executable: executable, arguments: arguments)
+            try Self.runProcess(
+                executable: executable,
+                arguments: arguments,
+                extraEnvironment: extraEnvironment
+            )
         }.value
 
         guard result.exitCode == 0 else {
@@ -173,7 +191,8 @@ final class HerdrCoreClient: HerdrCoreProviding, Sendable {
 
     private static func runProcess(
         executable: URL,
-        arguments: [String]
+        arguments: [String],
+        extraEnvironment: [String: String]
     ) throws -> (stdout: Data, stderr: Data, exitCode: Int32) {
         let fileManager = FileManager.default
         let temporaryDirectory = fileManager.temporaryDirectory
@@ -197,6 +216,10 @@ final class HerdrCoreClient: HerdrCoreProviding, Sendable {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
+        process.environment = ProcessInfo.processInfo.environment.merging(
+            extraEnvironment,
+            uniquingKeysWith: { _, new in new }
+        )
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = stdoutHandle
         process.standardError = stderrHandle
