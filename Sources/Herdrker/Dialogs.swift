@@ -157,6 +157,9 @@ struct NewTaskDialog: View {
                 hostID: selectedHostID
             )
         }
+        let selectedLocation = locationCandidates.first {
+            $0.id == selectedLocationID
+        }
         onSubmit(
             NewTaskRequest(
                 host: selectedHostID == HerdrModel.localHostID ? nil : selectedHostID,
@@ -164,9 +167,9 @@ struct NewTaskDialog: View {
                 command: trimmedCommand.isEmpty ? nil : trimmedCommand,
                 workingDirectory: resolvedDirectory,
                 parent: selectedParentAddress.isEmpty ? nil : selectedParentAddress,
-                whereLabel: locationCandidates
-                    .first(where: { $0.id == selectedLocationID })?
-                    .label
+                herdrSpaceID: selectedLocation?.spaceID,
+                herdrTabID: selectedLocation?.tabID,
+                whereLabel: selectedLocation?.label
             )
         )
     }

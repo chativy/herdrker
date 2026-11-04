@@ -81,6 +81,18 @@ enum HerdrCoreCommand: Equatable {
             if let whereLabel = request.whereLabel {
                 arguments.append(contentsOf: ["--label", "where=\(whereLabel)"])
             }
+            if let herdrSpaceID = request.herdrSpaceID {
+                arguments.append(contentsOf: [
+                    "--label",
+                    "herdr.space=\(herdrSpaceID)"
+                ])
+            }
+            if let herdrTabID = request.herdrTabID {
+                arguments.append(contentsOf: [
+                    "--label",
+                    "herdr.tab=\(herdrTabID)"
+                ])
+            }
             if let command = request.command {
                 arguments.append(contentsOf: ["--", command])
             }

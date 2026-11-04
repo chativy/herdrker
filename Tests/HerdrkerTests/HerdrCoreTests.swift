@@ -128,13 +128,15 @@ final class HerdrCoreTests: XCTestCase {
         XCTAssertFalse(arguments.contains("--no-parent"))
     }
 
-    func testTaskPassesHerdrWhereLabel() {
+    func testTaskPassesHerdrLocationLabels() {
         let request = NewTaskRequest(
             host: "o",
             name: "child",
             command: "sleep 100",
             workingDirectory: "/srv/app",
             parent: "o/t1",
+            herdrSpaceID: "o/sp-remote",
+            herdrTabID: "o/tb-deploy",
             whereLabel: "herdrker / review"
         )
 
@@ -147,6 +149,8 @@ final class HerdrCoreTests: XCTestCase {
                 "--name", "child",
                 "--cwd", "/srv/app",
                 "--label", "where=herdrker / review",
+                "--label", "herdr.space=o/sp-remote",
+                "--label", "herdr.tab=o/tb-deploy",
                 "--", "sleep 100"
             ]
         )

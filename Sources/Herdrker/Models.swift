@@ -6,6 +6,8 @@ struct NewTaskRequest: Equatable, Sendable {
     let command: String?
     let workingDirectory: String?
     let parent: String?
+    let herdrSpaceID: String?
+    let herdrTabID: String?
     let whereLabel: String?
 
     init(
@@ -14,6 +16,8 @@ struct NewTaskRequest: Equatable, Sendable {
         command: String?,
         workingDirectory: String?,
         parent: String? = nil,
+        herdrSpaceID: String? = nil,
+        herdrTabID: String? = nil,
         whereLabel: String? = nil
     ) {
         self.host = host
@@ -21,6 +25,8 @@ struct NewTaskRequest: Equatable, Sendable {
         self.command = command
         self.workingDirectory = workingDirectory
         self.parent = parent
+        self.herdrSpaceID = herdrSpaceID
+        self.herdrTabID = herdrTabID
         self.whereLabel = whereLabel
     }
 }
