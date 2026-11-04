@@ -336,11 +336,21 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             for: task,
             currentLocation: currentLocation
         )
+        let hasSubmenu = task.isFinished
+            || !node.children.isEmpty
+            || !availableMoveTargets.isEmpty
         let locationSuffix = currentLocation.map {
             " · \(appLocationLabels[$0.id] ?? $0.label)"
         } ?? ""
+        let shortcutSuffix: String
+        if hasSubmenu, let index = shortcutIndex(for: task) {
+            let key = index == 9 ? "0" : String(index + 1)
+            shortcutSuffix = "    \(hotkeyPrefix.display)\(key)"
+        } else {
+            shortcutSuffix = ""
+        }
         let item = NSMenuItem(
-            title: "\(task.displayName) — \(task.stateLabel)\(locationSuffix)",
+            title: "\(task.displayName) — \(task.stateLabel)\(locationSuffix)\(shortcutSuffix)",
             action: nil,
             keyEquivalent: ""
         )
@@ -360,9 +370,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             accessibilityDescription: task.stateLabel
         )
 
-        if !task.isFinished
-            && node.children.isEmpty
-            && availableMoveTargets.isEmpty {
+        if !hasSubmenu {
             item.action = #selector(openTask(_:))
             item.target = self
             return item
