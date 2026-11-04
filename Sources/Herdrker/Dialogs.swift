@@ -172,8 +172,8 @@ struct NewTaskDialog: View {
                 command: trimmedCommand.isEmpty ? nil : trimmedCommand,
                 workingDirectory: resolvedDirectory,
                 parent: selectedParentAddress.isEmpty ? nil : selectedParentAddress,
-                herdrSpaceID: selectedLocation?.spaceID,
-                herdrTabID: selectedLocation?.tabID,
+                herdrSpaceID: selectedLocation?.coreSpaceID,
+                herdrTabID: selectedLocation?.coreTabID,
                 whereLabel: selectedLocation?.label
             )
         )

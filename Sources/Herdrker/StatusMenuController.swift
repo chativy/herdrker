@@ -44,6 +44,16 @@ private final class TaskMenuPayload: NSObject {
     }
 }
 
+private final class MoveTaskPayload: NSObject {
+    let task: HerdrTask
+    let location: HerdrLocationChoice
+
+    init(task: HerdrTask, location: HerdrLocationChoice) {
+        self.task = task
+        self.location = location
+    }
+}
+
 @MainActor
 private final class HotkeyRecorder: NSObject {
     let label: NSTextField
@@ -151,7 +161,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 guard !Task.isCancelled else {
                     return
                 }
-                await self?.refresh()
+                await self?.refresh(includeLocations: true)
             }
         }
     }
@@ -321,7 +331,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private func taskItem(for node: HerdrTaskNode) -> NSMenuItem {
         let task = node.task
-        let locationSuffix = location(for: task).map {
+        let currentLocation = location(for: task)
+        let locationSuffix = currentLocation.map {
             " · \(appLocationLabels[$0.id] ?? $0.label)"
         } ?? ""
         let item = NSMenuItem(
@@ -345,12 +356,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             accessibilityDescription: task.stateLabel
         )
 
-        guard task.isFinished || !node.children.isEmpty else {
-            item.action = #selector(openTask(_:))
-            item.target = self
-            return item
-        }
-
         let actions = NSMenu(title: task.displayName)
         actions.autoenablesItems = false
         let openTitle = task.isFinished ? "View Final Screen" : "Attach"
@@ -372,6 +377,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             removeItem.target = self
             removeItem.representedObject = payload
             actions.addItem(removeItem)
+        } else {
+            actions.addItem(
+                moveToItem(
+                    for: task,
+                    currentLocation: currentLocation
+                )
+            )
         }
 
         if !node.children.isEmpty {
@@ -379,6 +391,60 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             appendTaskNodes(node.children, to: actions)
         }
         item.submenu = actions
+        return item
+    }
+
+    private func moveToItem(
+        for task: HerdrTask,
+        currentLocation: HerdrLocationChoice?
+    ) -> NSMenuItem {
+        let item = NSMenuItem(
+            title: "Move to",
+            action: nil,
+            keyEquivalent: ""
+        )
+        let submenu = NSMenu(title: "Move to")
+        submenu.autoenablesItems = false
+
+        let hostID = task.machine ?? HerdrModel.localHostID
+        let locations = appLocations.filter {
+            $0.hostID == hostID && $0.id != currentLocation?.id
+        }
+        if locations.isEmpty {
+            submenu.addItem(disabledItem("No other spaces or tabs"))
+            item.submenu = submenu
+            return item
+        }
+
+        let spaces = HerdrModel.spaces(from: locations)
+        let spaceLabels = HerdrModel.spaceLabels(for: spaces)
+        for space in spaces {
+            let spaceLocations = locations.filter { $0.spaceID == space.id }
+            let tabLabels = HerdrModel.tabLabels(for: spaceLocations)
+            let spaceItem = NSMenuItem(
+                title: spaceLabels[space.id] ?? space.label,
+                action: nil,
+                keyEquivalent: ""
+            )
+            let tabsMenu = NSMenu(title: spaceItem.title)
+            tabsMenu.autoenablesItems = false
+            for location in spaceLocations {
+                let tabItem = NSMenuItem(
+                    title: tabLabels[location.id] ?? location.tabName,
+                    action: #selector(moveTask(_:)),
+                    keyEquivalent: ""
+                )
+                tabItem.target = self
+                tabItem.representedObject = MoveTaskPayload(
+                    task: task,
+                    location: location
+                )
+                tabsMenu.addItem(tabItem)
+            }
+            spaceItem.submenu = tabsMenu
+            submenu.addItem(spaceItem)
+        }
+        item.submenu = submenu
         return item
     }
 
@@ -472,6 +538,59 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             return
         }
         activateTask(task)
+    }
+
+    @objc private func moveTask(_ sender: NSMenuItem) {
+        guard let payload = sender.representedObject as? MoveTaskPayload else {
+            return
+        }
+        let task = payload.task
+        let destination = payload.location
+        let previous = location(for: task)
+
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                if previous != nil {
+                    try await herdrAppClient.parkTerminal(address: task.address)
+                }
+                try await client.moveTask(
+                    address: task.address,
+                    spaceID: destination.coreSpaceID,
+                    tabID: destination.coreTabID
+                )
+                try await herdrAppClient.waitForPlacement(
+                    address: task.address,
+                    at: destination
+                )
+                await refresh(includeLocations: true)
+            } catch {
+                if let previous {
+                    let currentLocations =
+                        (try? await herdrAppClient.listLocations()) ?? []
+                    if currentLocations.contains(where: {
+                        $0.terminalAddresses.contains(task.address)
+                    }) {
+                        try? await herdrAppClient.parkTerminal(
+                            address: task.address
+                        )
+                    }
+                    try? await client.moveTask(
+                        address: task.address,
+                        spaceID: previous.coreSpaceID,
+                        tabID: previous.coreTabID
+                    )
+                    try? await herdrAppClient.waitForPlacement(
+                        address: task.address,
+                        at: previous
+                    )
+                }
+                await refresh(includeLocations: true)
+                showError(error)
+            }
+        }
     }
 
     private func activateTask(_ task: HerdrTask) {
@@ -598,6 +717,16 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                     request,
                     environment: terminalLauncher.taskEnvironment
                 )
+                if let spaceID = request.herdrSpaceID,
+                   let tabID = request.herdrTabID,
+                   let location = appLocations.first(where: {
+                       $0.coreSpaceID == spaceID && $0.coreTabID == tabID
+                   }) {
+                    try? await herdrAppClient.waitForPlacement(
+                        address: createdTask.address,
+                        at: location
+                    )
+                }
                 await refresh(includeLocations: true)
                 let detailedTask = try await client.task(address: createdTask.address)
                 try await terminalLauncher.open(

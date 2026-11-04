@@ -143,6 +143,8 @@ struct HerdrLocationChoice: Identifiable, Hashable, Sendable {
     var id: String { "\(spaceID)/\(tabID)" }
     var label: String { "\(spaceName) / \(tabName)" }
     var hostID: String { machine ?? HerdrModel.localHostID }
+    var coreSpaceID: String { localID(spaceID, machine: machine) }
+    var coreTabID: String { localID(tabID, machine: machine) }
     var disambiguatedLabel: String {
         "\(label) [\(shortSpaceID)/\(shortTabID)]"
     }
@@ -153,6 +155,26 @@ struct HerdrLocationChoice: Identifiable, Hashable, Sendable {
 
     private var shortTabID: String {
         String((tabID.split(separator: "/").last ?? "").prefix(8))
+    }
+
+    private func localID(_ id: String, machine: String?) -> String {
+        guard let machine, id.hasPrefix("\(machine)/") else {
+            return id
+        }
+        return String(id.dropFirst(machine.count + 1))
+    }
+}
+
+struct HerdrSpaceChoice: Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let machine: String?
+
+    var hostID: String { machine ?? HerdrModel.localHostID }
+    var label: String { name }
+    var disambiguatedLabel: String {
+        let shortID = id.split(separator: "/").last.map(String.init) ?? id
+        return "\(name) [\(shortID.prefix(8))]"
     }
 }
 
@@ -259,6 +281,49 @@ enum HerdrModel {
                 ? location.disambiguatedLabel
                 : location.label
             return (location.id, label)
+        })
+    }
+
+    static func tabLabels(
+        for locations: [HerdrLocationChoice]
+    ) -> [String: String] {
+        let counts = Dictionary(grouping: locations, by: \.tabName)
+            .mapValues(\.count)
+        return Dictionary(uniqueKeysWithValues: locations.map { location in
+            let shortID = location.coreTabID.prefix(8)
+            let label = counts[location.tabName, default: 0] > 1
+                ? "\(location.tabName) [\(shortID)]"
+                : location.tabName
+            return (location.id, label)
+        })
+    }
+
+    static func spaces(
+        from locations: [HerdrLocationChoice]
+    ) -> [HerdrSpaceChoice] {
+        var seen = Set<String>()
+        return locations.compactMap { location in
+            guard seen.insert(location.spaceID).inserted else {
+                return nil
+            }
+            return HerdrSpaceChoice(
+                id: location.spaceID,
+                name: location.spaceName,
+                machine: location.machine
+            )
+        }
+    }
+
+    static func spaceLabels(
+        for spaces: [HerdrSpaceChoice]
+    ) -> [String: String] {
+        let counts = Dictionary(grouping: spaces, by: \.label)
+            .mapValues(\.count)
+        return Dictionary(uniqueKeysWithValues: spaces.map { space in
+            let label = counts[space.label, default: 0] > 1
+                ? space.disambiguatedLabel
+                : space.label
+            return (space.id, label)
         })
     }
 

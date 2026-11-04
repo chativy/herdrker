@@ -10,6 +10,7 @@ protocol HerdrCoreProviding: Sendable {
         _ request: NewTaskRequest,
         environment: [String: String]
     ) async throws -> HerdrTask
+    func moveTask(address: String, spaceID: String, tabID: String) async throws
     func addHost(_ request: NewHostRequest) async throws
     func removeTask(address: String) async throws
 }
@@ -51,6 +52,7 @@ enum HerdrCoreCommand: Equatable {
     case listHosts
     case task(String)
     case createTask(NewTaskRequest)
+    case moveTask(String, spaceID: String, tabID: String)
     case addHost(NewHostRequest)
     case removeTask(String)
 
@@ -97,6 +99,12 @@ enum HerdrCoreCommand: Equatable {
                 arguments.append(contentsOf: ["--", command])
             }
             return arguments
+        case let .moveTask(address, spaceID, tabID):
+            return [
+                "label", "--json", address,
+                "herdr.space=\(spaceID)",
+                "herdr.tab=\(tabID)"
+            ]
         case let .addHost(request):
             var arguments = ["machine", "add", "--json"]
             if let name = request.name {
@@ -145,6 +153,12 @@ final class HerdrCoreClient: HerdrCoreProviding, Sendable {
                 for: .createTask(request),
                 extraEnvironment: environment
             )
+        )
+    }
+
+    func moveTask(address: String, spaceID: String, tabID: String) async throws {
+        _ = try await output(
+            for: .moveTask(address, spaceID: spaceID, tabID: tabID)
         )
     }
 

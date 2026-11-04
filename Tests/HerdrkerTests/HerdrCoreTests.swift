@@ -156,6 +156,21 @@ final class HerdrCoreTests: XCTestCase {
         )
     }
 
+    func testMoveTaskSetsHerdrSpaceAndTabLabels() {
+        XCTAssertEqual(
+            HerdrCoreCommand.moveTask(
+                "o/t3",
+                spaceID: "sp-destination",
+                tabID: "tb-destination"
+            ).arguments,
+            [
+                "label", "--json", "o/t3",
+                "herdr.space=sp-destination",
+                "herdr.tab=tb-destination"
+            ]
+        )
+    }
+
     func testTaskHierarchyNestsChildrenInParentOrder() {
         let parent = HerdrTask(
             address: "t1",
@@ -270,6 +285,57 @@ final class HerdrCoreTests: XCTestCase {
             labels[locations[1].id],
             "~ / 1 [sp74eb72/tb2e60d4]"
         )
+    }
+
+    func testRemoteLocationUsesMachineLocalCoreIDs() {
+        let location = HerdrLocationChoice(
+            spaceID: "o/sp-remote",
+            tabID: "o/tb-deploy",
+            spaceName: "service",
+            tabName: "deploy",
+            machine: "o"
+        )
+
+        XCTAssertEqual(location.coreSpaceID, "sp-remote")
+        XCTAssertEqual(location.coreTabID, "tb-deploy")
+    }
+
+    func testMoveTargetsGroupBySpaceAndDisambiguateTabs() {
+        let locations = [
+            HerdrLocationChoice(
+                spaceID: "sp-one",
+                tabID: "tb-one",
+                spaceName: "~",
+                tabName: "1",
+                machine: nil
+            ),
+            HerdrLocationChoice(
+                spaceID: "sp-one",
+                tabID: "tb-two",
+                spaceName: "~",
+                tabName: "1",
+                machine: nil
+            ),
+            HerdrLocationChoice(
+                spaceID: "sp-two",
+                tabID: "tb-three",
+                spaceName: "~",
+                tabName: "2",
+                machine: nil
+            )
+        ]
+
+        let spaces = HerdrModel.spaces(from: locations)
+        let spaceLabels = HerdrModel.spaceLabels(for: spaces)
+        let tabLabels = HerdrModel.tabLabels(
+            for: locations.filter { $0.spaceID == "sp-one" }
+        )
+
+        XCTAssertEqual(spaces.map(\.id), ["sp-one", "sp-two"])
+        XCTAssertEqual(spaceLabels["sp-one"], "~ [sp-one]")
+        XCTAssertEqual(spaceLabels["sp-two"], "~ [sp-two]")
+        XCTAssertEqual(tabLabels["sp-one/tb-one"], "1 [tb-one]")
+        XCTAssertEqual(tabLabels["sp-one/tb-two"], "1 [tb-two]")
     }
 
     func testTaskDetailsIncludeTerminalGeometry() throws {
