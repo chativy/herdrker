@@ -19,6 +19,7 @@ final class HerdrCoreTests: XCTestCase {
             "title": "Review",
             "state": "live",
             "status": "working",
+            "parent": "t4",
             "created_ms": 2000
           }
         ]
@@ -30,6 +31,7 @@ final class HerdrCoreTests: XCTestCase {
         XCTAssertEqual(tasks[0].displayName, "build")
         XCTAssertTrue(tasks[0].isFinished)
         XCTAssertEqual(tasks[1].machine, "mini")
+        XCTAssertEqual(tasks[1].parent, "t4")
         XCTAssertEqual(tasks[1].stateLabel, "Working")
     }
 
@@ -67,7 +69,7 @@ final class HerdrCoreTests: XCTestCase {
         XCTAssertEqual(
             HerdrCoreCommand.createTask(request).arguments,
             [
-                "run", "--bg", "--no-parent", "--json",
+                "run", "--bg", "--json", "--no-parent",
                 "--on", "mini",
                 "--name", "review",
                 "--cwd", "/srv/app",
@@ -105,9 +107,130 @@ final class HerdrCoreTests: XCTestCase {
         XCTAssertEqual(
             HerdrCoreCommand.createTask(request).arguments,
             [
-                "run", "--bg", "--no-parent", "--json", "--on", "mini"
+                "run", "--bg", "--json", "--no-parent", "--on", "mini"
             ]
         )
+    }
+
+    func testParentedTaskUsesParentInsteadOfNoParent() {
+        let request = NewTaskRequest(
+            host: nil,
+            name: "child",
+            command: nil,
+            workingDirectory: "/Users/example",
+            parent: "t1"
+        )
+
+        let arguments = HerdrCoreCommand.createTask(request).arguments
+
+        XCTAssertTrue(arguments.contains("--parent"))
+        XCTAssertTrue(arguments.contains("t1"))
+        XCTAssertFalse(arguments.contains("--no-parent"))
+    }
+
+    func testTaskPassesHerdrWhereLabel() {
+        let request = NewTaskRequest(
+            host: "o",
+            name: "child",
+            command: "sleep 100",
+            workingDirectory: "/srv/app",
+            parent: "o/t1",
+            whereLabel: "herdrker / review"
+        )
+
+        XCTAssertEqual(
+            HerdrCoreCommand.createTask(request).arguments,
+            [
+                "run", "--bg", "--json",
+                "--parent", "o/t1",
+                "--on", "o",
+                "--name", "child",
+                "--cwd", "/srv/app",
+                "--label", "where=herdrker / review",
+                "--", "sleep 100"
+            ]
+        )
+    }
+
+    func testTaskHierarchyNestsChildrenInParentOrder() {
+        let parent = HerdrTask(
+            address: "t1",
+            name: "parent",
+            title: nil,
+            machine: nil,
+            state: "live",
+            status: nil,
+            createdAt: nil
+        )
+        let child = HerdrTask(
+            address: "t2",
+            name: "child",
+            title: nil,
+            machine: nil,
+            state: "live",
+            status: nil,
+            createdAt: nil,
+            parent: "t1"
+        )
+        let grandchild = HerdrTask(
+            address: "t3",
+            name: "grandchild",
+            title: nil,
+            machine: nil,
+            state: "live",
+            status: nil,
+            createdAt: nil,
+            parent: "t2"
+        )
+
+        let hierarchy = HerdrModel.taskHierarchy(
+            tasks: [grandchild, parent, child]
+        )
+
+        XCTAssertEqual(hierarchy.map(\.task.address), ["t1"])
+        XCTAssertEqual(hierarchy[0].children.map(\.task.address), ["t2"])
+        XCTAssertEqual(
+            hierarchy[0].children[0].children.map(\.task.address),
+            ["t3"]
+        )
+        XCTAssertEqual(
+            HerdrModel.flattened(hierarchy).map(\.address),
+            ["t1", "t2", "t3"]
+        )
+    }
+
+    func testHerdrAppLocationsAreSelectableSpaceTabPairs() throws {
+        let data = Data("""
+        {
+          "spaces": [
+            {
+              "id": "sp-local",
+              "name": "herdrker",
+              "machine": null,
+              "tabs": [
+                {"id": "tb-review", "name": "review"},
+                {"id": "tb-build", "name": "build"}
+              ]
+            },
+            {
+              "id": "o/sp-remote",
+              "name": "service",
+              "machine": "o",
+              "tabs": [
+                {"id": "o/tb-deploy", "name": "deploy"}
+              ]
+            }
+          ]
+        }
+        """.utf8)
+
+        let locations = try HerdrModel.locations(from: data)
+
+        XCTAssertEqual(locations.count, 3)
+        XCTAssertEqual(locations[0].label, "herdrker / review")
+        XCTAssertEqual(locations[0].hostID, HerdrModel.localHostID)
+        XCTAssertEqual(locations[2].label, "service / deploy")
+        XCTAssertEqual(locations[2].hostID, "o")
     }
 
     func testTaskDetailsIncludeTerminalGeometry() throws {

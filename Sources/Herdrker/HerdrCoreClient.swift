@@ -63,7 +63,12 @@ enum HerdrCoreCommand: Equatable {
         case let .task(address):
             return ["get", address, "--json"]
         case let .createTask(request):
-            var arguments = ["run", "--bg", "--no-parent", "--json"]
+            var arguments = ["run", "--bg", "--json"]
+            if let parent = request.parent {
+                arguments.append(contentsOf: ["--parent", parent])
+            } else {
+                arguments.append("--no-parent")
+            }
             if let host = request.host {
                 arguments.append(contentsOf: ["--on", host])
             }
@@ -72,6 +77,9 @@ enum HerdrCoreCommand: Equatable {
             }
             if let workingDirectory = request.workingDirectory {
                 arguments.append(contentsOf: ["--cwd", workingDirectory])
+            }
+            if let whereLabel = request.whereLabel {
+                arguments.append(contentsOf: ["--label", "where=\(whereLabel)"])
             }
             if let command = request.command {
                 arguments.append(contentsOf: ["--", command])

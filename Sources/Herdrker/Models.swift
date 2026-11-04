@@ -5,6 +5,24 @@ struct NewTaskRequest: Equatable, Sendable {
     let name: String?
     let command: String?
     let workingDirectory: String?
+    let parent: String?
+    let whereLabel: String?
+
+    init(
+        host: String?,
+        name: String?,
+        command: String?,
+        workingDirectory: String?,
+        parent: String? = nil,
+        whereLabel: String? = nil
+    ) {
+        self.host = host
+        self.name = name
+        self.command = command
+        self.workingDirectory = workingDirectory
+        self.parent = parent
+        self.whereLabel = whereLabel
+    }
 }
 
 struct NewHostRequest: Equatable, Sendable {
@@ -23,6 +41,7 @@ struct HerdrTask: Identifiable, Hashable, Sendable {
     let createdAt: Date?
     let cols: Int?
     let rows: Int?
+    let parent: String?
 
     init(
         address: String,
@@ -33,7 +52,8 @@ struct HerdrTask: Identifiable, Hashable, Sendable {
         status: String?,
         createdAt: Date?,
         cols: Int? = nil,
-        rows: Int? = nil
+        rows: Int? = nil,
+        parent: String? = nil
     ) {
         self.address = address
         self.name = name
@@ -44,6 +64,7 @@ struct HerdrTask: Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.cols = cols
         self.rows = rows
+        self.parent = parent
     }
 
     var id: String { address }
@@ -80,6 +101,25 @@ struct HerdrHostGroup: Identifiable, Hashable, Sendable {
     let tasks: [HerdrTask]
 
     var id: String { host.id }
+}
+
+struct HerdrTaskNode: Identifiable, Hashable, Sendable {
+    let task: HerdrTask
+    let children: [HerdrTaskNode]
+
+    var id: String { task.address }
+}
+
+struct HerdrLocationChoice: Identifiable, Hashable, Sendable {
+    let spaceID: String
+    let tabID: String
+    let spaceName: String
+    let tabName: String
+    let machine: String?
+
+    var id: String { "\(spaceID)/\(tabID)" }
+    var label: String { "\(spaceName) / \(tabName)" }
+    var hostID: String { machine ?? HerdrModel.localHostID }
 }
 
 enum HerdrModel {
@@ -136,6 +176,75 @@ enum HerdrModel {
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> String? {
         hostID == localHostID ? homeDirectory.path : nil
+    }
+
+    static func taskHierarchy(tasks: [HerdrTask]) -> [HerdrTaskNode] {
+        let ordered = tasks.sorted(by: taskOrder)
+        let addresses = Set(ordered.map(\.address))
+        let childrenByParent = Dictionary(grouping: ordered.filter { task in
+            guard let parent = task.parent else {
+                return false
+            }
+            return parent != task.address && addresses.contains(parent)
+        }, by: { $0.parent! })
+        let roots = ordered.filter { task in
+            guard let parent = task.parent else {
+                return true
+            }
+            return !addresses.contains(parent) || parent == task.address
+        }
+        var emitted = Set<String>()
+
+        func node(_ task: HerdrTask, ancestors: Set<String>) -> HerdrTaskNode {
+            emitted.insert(task.address)
+            let nextAncestors = ancestors.union([task.address])
+            let children = (childrenByParent[task.address] ?? [])
+                .filter { !nextAncestors.contains($0.address) }
+                .map { node($0, ancestors: nextAncestors) }
+            return HerdrTaskNode(task: task, children: children)
+        }
+
+        var result = roots.map { node($0, ancestors: []) }
+        for task in ordered where !emitted.contains(task.address) {
+            result.append(node(task, ancestors: [task.address]))
+        }
+        return result
+    }
+
+    static func flattened(_ nodes: [HerdrTaskNode]) -> [HerdrTask] {
+        nodes.flatMap { [$0.task] + flattened($0.children) }
+    }
+
+    static func locations(from data: Data) throws -> [HerdrLocationChoice] {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let spaces = object["spaces"] as? [[String: Any]] else {
+            throw HerdrCoreError(
+                kind: "invalid_response",
+                message: "Herdr app returned an unexpected location list.",
+                hint: nil
+            )
+        }
+        return spaces.flatMap { space -> [HerdrLocationChoice] in
+            guard let spaceID = space["id"] as? String,
+                  let spaceName = space["name"] as? String else {
+                return []
+            }
+            let machine = space["machine"] as? String
+            let tabs = space["tabs"] as? [[String: Any]] ?? []
+            return tabs.compactMap { tab in
+                guard let tabID = tab["id"] as? String,
+                      let tabName = tab["name"] as? String else {
+                    return nil
+                }
+                return HerdrLocationChoice(
+                    spaceID: spaceID,
+                    tabID: tabID,
+                    spaceName: spaceName,
+                    tabName: tabName,
+                    machine: machine
+                )
+            }
+        }
     }
 
     private static func taskOrder(_ lhs: HerdrTask, _ rhs: HerdrTask) -> Bool {
@@ -213,7 +322,8 @@ enum HerdrJSON {
                 Date(timeIntervalSince1970: $0 / 1_000)
             },
             cols: integer(object["cols"]),
-            rows: integer(object["rows"])
+            rows: integer(object["rows"]),
+            parent: nonemptyString(object["parent"])
         )
     }
 
