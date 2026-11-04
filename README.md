@@ -1,5 +1,8 @@
 # Herdrker
 
+> **Experimental prototype:** Herdrker is not a product. It is an experiment
+> intended only to demonstrate what `herdr-core` can do.
+
 Herdrker is a macOS menu-bar controller for
 [herdr-core](https://github.com/herdrdev/herdr-core). It groups tasks by host,
 opens live tasks in Ghostty or Terminal, and shows finished tasks as read-only
