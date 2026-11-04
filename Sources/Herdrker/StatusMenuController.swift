@@ -3,6 +3,7 @@ import Carbon
 import SwiftUI
 
 private let herdrkerHotKeySignature: OSType = 0x4852444B
+private let taskShortcutColumn: CGFloat = 420
 
 private func herdrkerHotKeyHandler(
     _ nextHandler: EventHandlerCallRef?,
@@ -342,21 +343,22 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let locationSuffix = currentLocation.map {
             " · \(appLocationLabels[$0.id] ?? $0.label)"
         } ?? ""
-        let shortcutSuffix: String
-        if hasSubmenu, let index = shortcutIndex(for: task) {
-            let key = index == 9 ? "0" : String(index + 1)
-            shortcutSuffix = "    \(hotkeyPrefix.display)\(key)"
-        } else {
-            shortcutSuffix = ""
-        }
+        let title = "\(task.displayName) — \(task.stateLabel)\(locationSuffix)"
         let item = NSMenuItem(
-            title: "\(task.displayName) — \(task.stateLabel)\(locationSuffix)\(shortcutSuffix)",
+            title: title,
             action: nil,
             keyEquivalent: ""
         )
         if let index = shortcutIndex(for: task) {
-            item.keyEquivalent = index == 9 ? "0" : String(index + 1)
+            let key = index == 9 ? "0" : String(index + 1)
+            item.keyEquivalent = key
             item.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
+            if hasSubmenu {
+                item.attributedTitle = menuTitle(
+                    title,
+                    shortcut: "\(hotkeyPrefix.display)\(key)"
+                )
+            }
         }
 
         let payload = TaskMenuPayload(task: task)
@@ -412,6 +414,27 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
         item.submenu = actions
         return item
+    }
+
+    private func menuTitle(
+        _ title: String,
+        shortcut: String
+    ) -> NSAttributedString {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.tabStops = [
+            NSTextTab(textAlignment: .right, location: taskShortcutColumn)
+        ]
+        let value = NSMutableAttributedString(
+            string: "\(title)\t\(shortcut)"
+        )
+        value.addAttributes(
+            [
+                .font: NSFont.menuFont(ofSize: 0),
+                .paragraphStyle: paragraph
+            ],
+            range: NSRange(location: 0, length: value.length)
+        )
+        return value
     }
 
     private func moveToItem(
