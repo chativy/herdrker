@@ -425,7 +425,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     ) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
         paragraph.tabStops = [
-            NSTextTab(textAlignment: .right, location: column)
+            NSTextTab(textAlignment: .left, location: column)
         ]
         let value = NSMutableAttributedString(
             string: "\(title)\t\(shortcut)"
@@ -447,7 +447,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 withAttributes: [.font: font]
             ).width
         }.max() ?? 0
-        return ceil(widest) + 24
+        return ceil(widest) + 16
     }
 
     private func taskTitle(for task: HerdrTask) -> String {
