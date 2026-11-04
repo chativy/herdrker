@@ -3,7 +3,6 @@ import Carbon
 import SwiftUI
 
 private let herdrkerHotKeySignature: OSType = 0x4852444B
-private let taskShortcutColumn: CGFloat = 420
 
 private func herdrkerHotKeyHandler(
     _ nextHandler: EventHandlerCallRef?,
@@ -325,12 +324,21 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     private func appendTaskNodes(_ nodes: [HerdrTaskNode], to menu: NSMenu) {
+        let column = shortcutColumn(for: nodes)
         for node in nodes {
-            menu.addItem(taskItem(for: node))
+            menu.addItem(
+                taskItem(
+                    for: node,
+                    shortcutColumn: column
+                )
+            )
         }
     }
 
-    private func taskItem(for node: HerdrTaskNode) -> NSMenuItem {
+    private func taskItem(
+        for node: HerdrTaskNode,
+        shortcutColumn: CGFloat
+    ) -> NSMenuItem {
         let task = node.task
         let currentLocation = location(for: task)
         let availableMoveTargets = moveTargets(
@@ -340,10 +348,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let hasSubmenu = task.isFinished
             || !node.children.isEmpty
             || !availableMoveTargets.isEmpty
-        let locationSuffix = currentLocation.map {
-            " · \(appLocationLabels[$0.id] ?? $0.label)"
-        } ?? ""
-        let title = "\(task.displayName) — \(task.stateLabel)\(locationSuffix)"
+        let title = taskTitle(for: task)
         let item = NSMenuItem(
             title: title,
             action: nil,
@@ -351,14 +356,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         )
         if let index = shortcutIndex(for: task) {
             let key = index == 9 ? "0" : String(index + 1)
-            item.keyEquivalent = key
-            item.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
-            if hasSubmenu {
-                item.attributedTitle = menuTitle(
-                    title,
-                    shortcut: "\(hotkeyPrefix.display)\(key)"
-                )
-            }
+            item.attributedTitle = menuTitle(
+                title,
+                shortcut: "\(hotkeyPrefix.display)\(key)",
+                column: shortcutColumn
+            )
         }
 
         let payload = TaskMenuPayload(task: task)
@@ -418,11 +420,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private func menuTitle(
         _ title: String,
-        shortcut: String
+        shortcut: String,
+        column: CGFloat
     ) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
         paragraph.tabStops = [
-            NSTextTab(textAlignment: .right, location: taskShortcutColumn)
+            NSTextTab(textAlignment: .right, location: column)
         ]
         let value = NSMutableAttributedString(
             string: "\(title)\t\(shortcut)"
@@ -435,6 +438,23 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             range: NSRange(location: 0, length: value.length)
         )
         return value
+    }
+
+    private func shortcutColumn(for nodes: [HerdrTaskNode]) -> CGFloat {
+        let font = NSFont.menuFont(ofSize: 0)
+        let widest = nodes.map { node in
+            (taskTitle(for: node.task) as NSString).size(
+                withAttributes: [.font: font]
+            ).width
+        }.max() ?? 0
+        return ceil(widest) + 24
+    }
+
+    private func taskTitle(for task: HerdrTask) -> String {
+        let locationSuffix = location(for: task).map {
+            " · \(appLocationLabels[$0.id] ?? $0.label)"
+        } ?? ""
+        return "\(task.displayName) — \(task.stateLabel)\(locationSuffix)"
     }
 
     private func moveToItem(
