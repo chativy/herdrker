@@ -114,8 +114,8 @@ swift test
 open build/Herdrker.app
 ```
 
-Set `HERDRKER_CONFIGURATION=debug` for a faster local build. The bundle is
-signed with a valid local Apple Development identity. Set
+Set `HERDRKER_CONFIGURATION=debug` for a faster local build. Distribution
+builds must use a valid Developer ID Application identity. Set
 `HERDRKER_SIGN_IDENTITY` to choose a specific signing certificate.
 
 Creating a task automatically opens and attaches its terminal. The first 10
