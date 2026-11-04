@@ -437,6 +437,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             ],
             range: NSRange(location: 0, length: value.length)
         )
+        value.addAttribute(
+            .kern,
+            value: -8,
+            range: NSRange(location: value.length - 1, length: 1)
+        )
         return value
     }
 
