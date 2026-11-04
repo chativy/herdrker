@@ -47,9 +47,10 @@ Tasks placed in Herdr tabs show that space and tab in the menu. If two spaces
 or tabs share the same display name, short IDs are shown so they can be told
 apart.
 
-Each live task's submenu includes **Move to**, followed by its available spaces
-and their tabs. Moving keeps the task process running and places its existing
-terminal in the selected Herdr tab.
+**Move to** appears only when the live task has another existing space or tab
+available on its host. It lists the destination spaces and their tabs. Moving
+keeps the task process running and places its existing terminal in the selected
+Herdr tab. A live task without move targets remains directly selectable.
 
 For example, keep a shell, build process, and agent session running on each
 host. Close all three windows while working elsewhere. Use the host submenu or

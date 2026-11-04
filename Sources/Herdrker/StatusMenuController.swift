@@ -332,6 +332,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private func taskItem(for node: HerdrTaskNode) -> NSMenuItem {
         let task = node.task
         let currentLocation = location(for: task)
+        let availableMoveTargets = moveTargets(
+            for: task,
+            currentLocation: currentLocation
+        )
         let locationSuffix = currentLocation.map {
             " · \(appLocationLabels[$0.id] ?? $0.label)"
         } ?? ""
@@ -356,6 +360,14 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             accessibilityDescription: task.stateLabel
         )
 
+        if !task.isFinished
+            && node.children.isEmpty
+            && availableMoveTargets.isEmpty {
+            item.action = #selector(openTask(_:))
+            item.target = self
+            return item
+        }
+
         let actions = NSMenu(title: task.displayName)
         actions.autoenablesItems = false
         let openTitle = task.isFinished ? "View Final Screen" : "Attach"
@@ -377,11 +389,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             removeItem.target = self
             removeItem.representedObject = payload
             actions.addItem(removeItem)
-        } else {
+        } else if !availableMoveTargets.isEmpty {
             actions.addItem(
                 moveToItem(
                     for: task,
-                    currentLocation: currentLocation
+                    locations: availableMoveTargets
                 )
             )
         }
@@ -396,7 +408,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private func moveToItem(
         for task: HerdrTask,
-        currentLocation: HerdrLocationChoice?
+        locations: [HerdrLocationChoice]
     ) -> NSMenuItem {
         let item = NSMenuItem(
             title: "Move to",
@@ -405,16 +417,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         )
         let submenu = NSMenu(title: "Move to")
         submenu.autoenablesItems = false
-
-        let hostID = task.machine ?? HerdrModel.localHostID
-        let locations = appLocations.filter {
-            $0.hostID == hostID && $0.id != currentLocation?.id
-        }
-        if locations.isEmpty {
-            submenu.addItem(disabledItem("No other spaces or tabs"))
-            item.submenu = submenu
-            return item
-        }
 
         let spaces = HerdrModel.spaces(from: locations)
         let spaceLabels = HerdrModel.spaceLabels(for: spaces)
@@ -446,6 +448,19 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
         item.submenu = submenu
         return item
+    }
+
+    private func moveTargets(
+        for task: HerdrTask,
+        currentLocation: HerdrLocationChoice?
+    ) -> [HerdrLocationChoice] {
+        guard !task.isFinished else {
+            return []
+        }
+        let hostID = task.machine ?? HerdrModel.localHostID
+        return appLocations.filter {
+            $0.hostID == hostID && $0.id != currentLocation?.id
+        }
     }
 
     private func hostTitle(for group: HerdrHostGroup) -> String {
