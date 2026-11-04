@@ -97,6 +97,7 @@ private final class HotkeyRecorder: NSObject {
 final class StatusMenuController: NSObject, NSMenuDelegate {
     private let client: any HerdrCoreProviding
     private let terminalLauncher: TerminalLauncher
+    private let herdrAppClient: HerdrAppLocationClient
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private let herdrIcon: NSImage?
@@ -115,10 +116,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     init(
         client: any HerdrCoreProviding,
-        terminalLauncher: TerminalLauncher = TerminalLauncher()
+        terminalLauncher: TerminalLauncher = TerminalLauncher(),
+        herdrAppClient: HerdrAppLocationClient = HerdrAppLocationClient()
     ) {
         self.client = client
         self.terminalLauncher = terminalLauncher
+        self.herdrAppClient = herdrAppClient
         self.statusItem = NSStatusBar.system.statusItem(
             withLength: NSStatusItem.variableLength
         )
@@ -296,56 +299,77 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             return submenu
         }
 
-        for task in group.tasks {
-            let item = NSMenuItem(
-                title: "\(task.displayName) — \(task.stateLabel)",
-                action: nil,
+        appendTaskNodes(
+            HerdrModel.taskHierarchy(tasks: group.tasks),
+            to: submenu
+        )
+        return submenu
+    }
+
+    private func appendTaskNodes(_ nodes: [HerdrTaskNode], to menu: NSMenu) {
+        for node in nodes {
+            menu.addItem(taskItem(for: node))
+        }
+    }
+
+    private func taskItem(for node: HerdrTaskNode) -> NSMenuItem {
+        let task = node.task
+        let item = NSMenuItem(
+            title: "\(task.displayName) — \(task.stateLabel)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        if let index = shortcutIndex(for: task) {
+            item.keyEquivalent = index == 9 ? "0" : String(index + 1)
+            item.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
+        }
+
+        let payload = TaskMenuPayload(task: task)
+        item.representedObject = payload
+        item.image = NSImage(
+            systemSymbolName: task.isFinished
+                ? "stop.circle.fill"
+                : task.status == "blocked"
+                    ? "exclamationmark.circle.fill"
+                    : "circle.fill",
+            accessibilityDescription: task.stateLabel
+        )
+
+        guard task.isFinished || !node.children.isEmpty else {
+            item.action = #selector(openTask(_:))
+            item.target = self
+            return item
+        }
+
+        let actions = NSMenu(title: task.displayName)
+        actions.autoenablesItems = false
+        let openTitle = task.isFinished ? "View Final Screen" : "Attach"
+        let openItem = NSMenuItem(
+            title: openTitle,
+            action: #selector(openTask(_:)),
+            keyEquivalent: ""
+        )
+        openItem.target = self
+        openItem.representedObject = payload
+        actions.addItem(openItem)
+
+        if task.isFinished {
+            let removeItem = NSMenuItem(
+                title: "Remove Task",
+                action: #selector(confirmRemoveTask(_:)),
                 keyEquivalent: ""
             )
-            if let index = shortcutIndex(for: task) {
-                item.keyEquivalent = index == 9 ? "0" : String(index + 1)
-                item.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
-            }
-            let payload = TaskMenuPayload(task: task)
-            item.representedObject = payload
-
-            if task.isFinished {
-                item.image = NSImage(
-                    systemSymbolName: "stop.circle.fill",
-                    accessibilityDescription: "Stopped"
-                )
-                let actions = NSMenu(title: task.displayName)
-                let viewItem = NSMenuItem(
-                    title: "View Final Screen",
-                    action: #selector(openTask(_:)),
-                    keyEquivalent: ""
-                )
-                viewItem.target = self
-                viewItem.representedObject = payload
-                actions.addItem(viewItem)
-
-                let removeItem = NSMenuItem(
-                    title: "Remove Task",
-                    action: #selector(confirmRemoveTask(_:)),
-                    keyEquivalent: ""
-                )
-                removeItem.target = self
-                removeItem.representedObject = payload
-                actions.addItem(removeItem)
-                item.submenu = actions
-            } else {
-                item.action = #selector(openTask(_:))
-                item.target = self
-                item.image = NSImage(
-                    systemSymbolName: task.status == "blocked"
-                        ? "exclamationmark.circle.fill"
-                        : "circle.fill",
-                    accessibilityDescription: task.stateLabel
-                )
-            }
-            submenu.addItem(item)
+            removeItem.target = self
+            removeItem.representedObject = payload
+            actions.addItem(removeItem)
         }
-        return submenu
+
+        if !node.children.isEmpty {
+            actions.addItem(.separator())
+            appendTaskNodes(node.children, to: actions)
+        }
+        item.submenu = actions
+        return item
     }
 
     private func hostTitle(for group: HerdrHostGroup) -> String {
@@ -482,8 +506,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func showNewTask() {
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            let locations = (try? await herdrAppClient.listLocations()) ?? []
+            presentNewTask(locations: locations)
+        }
+    }
+
+    private func presentNewTask(locations: [HerdrLocationChoice]) {
         let rootView = NewTaskDialog(
             hosts: groups.map(\.host),
+            tasks: orderedTasks,
+            locations: locations,
             onCancel: { [weak self] in
                 self?.activeDialog?.close()
             },
@@ -494,7 +530,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         )
         presentDialog(
             title: "Herdrker — New Task",
-            size: NSSize(width: 520, height: 420),
+            size: NSSize(width: 520, height: 520),
             rootView: AnyView(rootView)
         )
     }
@@ -586,7 +622,15 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     private var shortcutTasks: [HerdrTask] {
-        Array(groups.flatMap(\.tasks).prefix(10))
+        Array(orderedTasks.prefix(10))
+    }
+
+    private var orderedTasks: [HerdrTask] {
+        groups.flatMap { group in
+            HerdrModel.flattened(
+                HerdrModel.taskHierarchy(tasks: group.tasks)
+            )
+        }
     }
 
     private func shortcutIndex(for task: HerdrTask) -> Int? {

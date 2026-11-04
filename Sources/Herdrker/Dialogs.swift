@@ -4,11 +4,15 @@ import SwiftUI
 @MainActor
 struct NewTaskDialog: View {
     let hosts: [HerdrHost]
+    let tasks: [HerdrTask]
+    let locations: [HerdrLocationChoice]
     let onCancel: () -> Void
     let onSubmit: (NewTaskRequest) -> Void
 
     @State private var selectedHostID: String
+    @State private var selectedParentAddress = ""
     @State private var taskName = ""
+    @State private var selectedLocationID = ""
     @State private var command = ""
     @State private var workingDirectory = ""
     @State private var validationError: String?
@@ -16,10 +20,14 @@ struct NewTaskDialog: View {
 
     init(
         hosts: [HerdrHost],
+        tasks: [HerdrTask],
+        locations: [HerdrLocationChoice],
         onCancel: @escaping () -> Void,
         onSubmit: @escaping (NewTaskRequest) -> Void
     ) {
         self.hosts = hosts
+        self.tasks = tasks
+        self.locations = locations
         self.onCancel = onCancel
         self.onSubmit = onSubmit
         _selectedHostID = State(initialValue: hosts.first?.id ?? HerdrModel.localHostID)
@@ -60,6 +68,31 @@ struct NewTaskDialog: View {
                         .frame(width: 300)
                 }
                 GridRow {
+                    Text("Parent")
+                        .frame(width: 120, alignment: .trailing)
+                    Picker("Parent", selection: $selectedParentAddress) {
+                        Text("None (independent task)").tag("")
+                        ForEach(parentCandidates) { task in
+                            Text("\(task.displayName) (\(task.address))")
+                                .tag(task.address)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 300)
+                }
+                GridRow {
+                    Text("Space / tab")
+                        .frame(width: 120, alignment: .trailing)
+                    Picker("Space / tab", selection: $selectedLocationID) {
+                        Text("None").tag("")
+                        ForEach(locationCandidates) { location in
+                            Text(location.label).tag(location.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 300)
+                }
+                GridRow {
                     Text("Command")
                         .frame(width: 120, alignment: .trailing)
                     TextField("Optional", text: $command)
@@ -91,7 +124,25 @@ struct NewTaskDialog: View {
         .onAppear {
             taskNameFocused = true
         }
+        .onChange(of: selectedHostID) { _, _ in
+            if !parentCandidates.contains(where: { $0.address == selectedParentAddress }) {
+                selectedParentAddress = ""
+            }
+            if !locationCandidates.contains(where: { $0.id == selectedLocationID }) {
+                selectedLocationID = ""
+            }
+        }
         .onExitCommand(perform: onCancel)
+    }
+
+    private var parentCandidates: [HerdrTask] {
+        tasks.filter {
+            !$0.isFinished && ($0.machine ?? HerdrModel.localHostID) == selectedHostID
+        }
+    }
+
+    private var locationCandidates: [HerdrLocationChoice] {
+        locations.filter { $0.hostID == selectedHostID }
     }
 
     private func submit() {
@@ -111,7 +162,11 @@ struct NewTaskDialog: View {
                 host: selectedHostID == HerdrModel.localHostID ? nil : selectedHostID,
                 name: trimmedName.isEmpty ? nil : trimmedName,
                 command: trimmedCommand.isEmpty ? nil : trimmedCommand,
-                workingDirectory: resolvedDirectory
+                workingDirectory: resolvedDirectory,
+                parent: selectedParentAddress.isEmpty ? nil : selectedParentAddress,
+                whereLabel: locationCandidates
+                    .first(where: { $0.id == selectedLocationID })?
+                    .label
             )
         )
     }

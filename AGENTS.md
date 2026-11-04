@@ -16,7 +16,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 
 ### Tasks
 
-- A task dialog must let the user choose a host and enter an optional task name, shell command, and working directory. When the command is blank, omit it so Herdr Core starts that host's login shell. Default a local task with no working directory to the user's home folder. Create the task with `hc run --bg --no-parent`, passing `--on <host>` for remote hosts. Do not inject shell color variables from the app.
+- A task dialog must let the user choose a host, optional live parent task, optional task name, existing Herdr space/tab location, shell command, and working directory. Read locations from `herdr-app ls` and offer only locations on the selected host. Offer only live parent tasks on the selected host. When no parent is selected, preserve the current independent behavior with `--no-parent`; otherwise use `--parent <address>` without `--no-parent`. Pass a selected location through `--label "where=<space> / <tab>"`. When the command is blank, omit it so Herdr Core starts that host's login shell. Default a local task with no working directory to the user's home folder. Create the task with `hc run --bg`, passing `--on <host>` for remote hosts. Do not inject shell color variables from the app.
 - After a task is created successfully, immediately open its terminal and attach to the new task.
 - Supply the creation client's terminal identity (`TERM`, `TERM_PROGRAM`, and `COLORTERM`) because Herdr Core fixes it before the task is attached. Do not inject `CLICOLOR`; shell color preferences belong in the user's shell configuration.
 - Assign global hotkeys to the first 10 tasks in menu order using the configured modifier prefix plus 1 through 9, then 0. The default prefix is Command+Option. The top-level **Assign Hotkey…** menu item must capture a modifier prefix from the keyboard and apply it to all task shortcuts. Invoking a hotkey must focus the tracked task window or open and attach it when no tracked window exists.
@@ -26,6 +26,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 - A finished task opens its final screen with `hc read <address>` through `less -S` so long lines preserve their original width. The terminal process must ignore task input. Do not call `attach` for finished tasks because Herdr Core rejects it.
 - A finished task's submenu must offer **View Final Screen** and **Remove Task**. Remove only finished tasks, using `hc rm <address>`.
 - Display task state clearly. Treat Herdr's `finished` state as stopped.
+- Within each host submenu, represent parent-child relationships as nested task submenus. Parent items with children must expose Attach/View, their own task actions, and then the child tasks. Keep hotkey numbering in visible preorder.
 
 ### Hosts
 

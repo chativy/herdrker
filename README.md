@@ -16,9 +16,11 @@ final screens.
 1. Launch Herdrker. It appears only in the macOS menu bar.
 2. Choose **Add Host…** to connect another SSH machine, or use **This Mac** for
    local tasks.
-3. Choose **New Task…**, select a host, and enter an optional name, command,
+3. Choose **New Task…**, select a host, then select an optional live parent
+   task or existing Herdr space/tab location. Enter an optional name, command,
    and working directory. Leave the command blank to start that host's login
-   shell; a local task with no directory starts in your home folder.
+   shell; a local task with no directory starts in your home folder. With no
+   parent, the task is independent.
 4. Select a live task to open it in Ghostty or Terminal. A red dot beside the
    menu-bar icon indicates that at least one task exists.
 5. Close the terminal window when you no longer need to see it. Closing the
@@ -38,6 +40,9 @@ Create the persistent tasks needed for each host, then close their terminal
 windows. Treat the windows as temporary views rather than as processes that
 must remain open. Use hotkeys to switch to the task that needs attention and
 close the window again when the work is no longer visible.
+
+Tasks with a parent are nested below that parent in the host's menu. Parent
+tasks still expose their own Attach/View action before their children.
 
 For example, keep a shell, build process, and agent session running on each
 host. Close all three windows while working elsewhere. Use the host submenu or
