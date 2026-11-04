@@ -122,10 +122,38 @@ struct HerdrLocationChoice: Identifiable, Hashable, Sendable {
     let spaceName: String
     let tabName: String
     let machine: String?
+    let terminalAddresses: [String]
+
+    init(
+        spaceID: String,
+        tabID: String,
+        spaceName: String,
+        tabName: String,
+        machine: String?,
+        terminalAddresses: [String] = []
+    ) {
+        self.spaceID = spaceID
+        self.tabID = tabID
+        self.spaceName = spaceName
+        self.tabName = tabName
+        self.machine = machine
+        self.terminalAddresses = terminalAddresses
+    }
 
     var id: String { "\(spaceID)/\(tabID)" }
     var label: String { "\(spaceName) / \(tabName)" }
     var hostID: String { machine ?? HerdrModel.localHostID }
+    var disambiguatedLabel: String {
+        "\(label) [\(shortSpaceID)/\(shortTabID)]"
+    }
+
+    private var shortSpaceID: String {
+        String((spaceID.split(separator: "/").last ?? "").prefix(8))
+    }
+
+    private var shortTabID: String {
+        String((tabID.split(separator: "/").last ?? "").prefix(8))
+    }
 }
 
 enum HerdrModel {
@@ -221,6 +249,19 @@ enum HerdrModel {
         nodes.flatMap { [$0.task] + flattened($0.children) }
     }
 
+    static func locationLabels(
+        for locations: [HerdrLocationChoice]
+    ) -> [String: String] {
+        let counts = Dictionary(grouping: locations, by: \.label)
+            .mapValues(\.count)
+        return Dictionary(uniqueKeysWithValues: locations.map { location in
+            let label = counts[location.label, default: 0] > 1
+                ? location.disambiguatedLabel
+                : location.label
+            return (location.id, label)
+        })
+    }
+
     static func locations(from data: Data) throws -> [HerdrLocationChoice] {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let spaces = object["spaces"] as? [[String: Any]] else {
@@ -242,12 +283,16 @@ enum HerdrModel {
                       let tabName = tab["name"] as? String else {
                     return nil
                 }
+                let terminalAddresses = (tab["terminals"] as? [[String: Any]] ?? [])
+                    .compactMap { $0["terminal"] as? String }
+                    .filter { !$0.isEmpty }
                 return HerdrLocationChoice(
                     spaceID: spaceID,
                     tabID: tabID,
                     spaceName: spaceName,
                     tabName: tabName,
-                    machine: machine
+                    machine: machine,
+                    terminalAddresses: terminalAddresses
                 )
             }
         }

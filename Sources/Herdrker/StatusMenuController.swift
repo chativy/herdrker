@@ -107,6 +107,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private var hosts: [HerdrHost] = []
     private var tasks: [HerdrTask] = []
     private var groups: [HerdrHostGroup] = []
+    private var appLocations: [HerdrLocationChoice] = []
     private var loadError: String?
     private var isMenuOpen = false
     private var refreshLoop: Task<Void, Never>?
@@ -144,7 +145,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         registerGlobalHotKeys()
         refreshLoop?.cancel()
         refreshLoop = Task { [weak self] in
-            await self?.refresh()
+            await self?.refresh(includeLocations: true)
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled else {
@@ -164,7 +165,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
         Task { [weak self] in
-            await self?.refresh()
+            await self?.refresh(includeLocations: true)
         }
     }
 
@@ -173,9 +174,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         rebuildMenu()
     }
 
-    private func refresh() async {
+    private func refresh(includeLocations: Bool = false) async {
         var nextTasks = tasks
         var nextHosts = hosts
+        var nextLocations = appLocations
         var errors: [String] = []
 
         do {
@@ -190,8 +192,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             errors.append(error.localizedDescription)
         }
 
+        if includeLocations {
+            nextLocations = (try? await herdrAppClient.listLocations()) ?? []
+        }
+
         tasks = nextTasks
         hosts = nextHosts
+        appLocations = nextLocations
         groups = HerdrModel.groups(hosts: nextHosts, tasks: nextTasks)
         loadError = errors.first
         updateStatusIcon(hasTasks: !nextTasks.isEmpty)
@@ -314,8 +321,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private func taskItem(for node: HerdrTaskNode) -> NSMenuItem {
         let task = node.task
+        let locationSuffix = location(for: task).map {
+            " · \(appLocationLabels[$0.id] ?? $0.label)"
+        } ?? ""
         let item = NSMenuItem(
-            title: "\(task.displayName) — \(task.stateLabel)",
+            title: "\(task.displayName) — \(task.stateLabel)\(locationSuffix)",
             action: nil,
             keyEquivalent: ""
         )
@@ -377,6 +387,14 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let suffix = count == 0 ? "" : " (\(count))"
         let warning = group.host.hasConnectionError ? " — Disconnected" : ""
         return group.host.displayName + suffix + warning
+    }
+
+    private var appLocationLabels: [String: String] {
+        HerdrModel.locationLabels(for: appLocations)
+    }
+
+    private func location(for task: HerdrTask) -> HerdrLocationChoice? {
+        appLocations.first { $0.terminalAddresses.contains(task.address) }
     }
 
     private func disabledItem(_ title: String) -> NSMenuItem {
@@ -511,6 +529,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 return
             }
             let locations = (try? await herdrAppClient.listLocations()) ?? []
+            appLocations = locations
             presentNewTask(locations: locations)
         }
     }
@@ -579,7 +598,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                     request,
                     environment: terminalLauncher.taskEnvironment
                 )
-                await refresh()
+                await refresh(includeLocations: true)
                 let detailedTask = try await client.task(address: createdTask.address)
                 try await terminalLauncher.open(
                     task: detailedTask,
@@ -613,7 +632,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     @objc private func refreshNow() {
         Task { [weak self] in
-            await self?.refresh()
+            await self?.refresh(includeLocations: true)
         }
     }
 

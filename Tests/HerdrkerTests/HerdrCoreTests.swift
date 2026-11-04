@@ -212,7 +212,11 @@ final class HerdrCoreTests: XCTestCase {
               "name": "herdrker",
               "machine": null,
               "tabs": [
-                {"id": "tb-review", "name": "review"},
+                {
+                  "id": "tb-review",
+                  "name": "review",
+                  "terminals": [{"terminal": "t1"}]
+                },
                 {"id": "tb-build", "name": "build"}
               ]
             },
@@ -233,8 +237,39 @@ final class HerdrCoreTests: XCTestCase {
         XCTAssertEqual(locations.count, 3)
         XCTAssertEqual(locations[0].label, "herdrker / review")
         XCTAssertEqual(locations[0].hostID, HerdrModel.localHostID)
+        XCTAssertEqual(locations[0].terminalAddresses, ["t1"])
         XCTAssertEqual(locations[2].label, "service / deploy")
         XCTAssertEqual(locations[2].hostID, "o")
+    }
+
+    func testDuplicateLocationLabelsIncludeShortIdentifiers() {
+        let locations = [
+            HerdrLocationChoice(
+                spaceID: "sp1df1d883228ab",
+                tabID: "tb93f21820b3",
+                spaceName: "~",
+                tabName: "1",
+                machine: nil
+            ),
+            HerdrLocationChoice(
+                spaceID: "sp74eb7204eb2f",
+                tabID: "tb2e60d44990",
+                spaceName: "~",
+                tabName: "1",
+                machine: nil
+            )
+        ]
+
+        let labels = HerdrModel.locationLabels(for: locations)
+
+        XCTAssertEqual(
+            labels[locations[0].id],
+            "~ / 1 [sp1df1d8/tb93f218]"
+        )
+        XCTAssertEqual(
+            labels[locations[1].id],
+            "~ / 1 [sp74eb72/tb2e60d4]"
+        )
     }
 
     func testTaskDetailsIncludeTerminalGeometry() throws {

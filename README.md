@@ -43,6 +43,9 @@ close the window again when the work is no longer visible.
 
 Tasks with a parent are nested below that parent in the host's menu. Parent
 tasks still expose their own Attach/View action before their children.
+Tasks placed in Herdr tabs show that space and tab in the menu. If two spaces
+or tabs share the same display name, short IDs are shown so they can be told
+apart.
 
 For example, keep a shell, build process, and agent session running on each
 host. Close all three windows while working elsewhere. Use the host submenu or

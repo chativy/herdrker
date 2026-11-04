@@ -27,6 +27,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 - A finished task's submenu must offer **View Final Screen** and **Remove Task**. Remove only finished tasks, using `hc rm <address>`.
 - Display task state clearly. Treat Herdr's `finished` state as stopped.
 - Within each host submenu, represent parent-child relationships as nested task submenus. Parent items with children must expose Attach/View, their own task actions, and then the child tasks. Keep hotkey numbering in visible preorder.
+- Map `herdr-app ls` tab terminals back to task addresses. Show the selected space/tab beside each placed task in host menus. When multiple locations have the same space/tab name, append short space and tab IDs to both task labels and New Task picker entries so they remain distinguishable.
 
 ### Hosts
 

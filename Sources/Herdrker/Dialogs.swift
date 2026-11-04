@@ -86,7 +86,8 @@ struct NewTaskDialog: View {
                     Picker("Space / tab", selection: $selectedLocationID) {
                         Text("None").tag("")
                         ForEach(locationCandidates) { location in
-                            Text(location.label).tag(location.id)
+                            Text(locationLabels[location.id] ?? location.label)
+                                .tag(location.id)
                         }
                     }
                     .labelsHidden()
@@ -143,6 +144,10 @@ struct NewTaskDialog: View {
 
     private var locationCandidates: [HerdrLocationChoice] {
         locations.filter { $0.hostID == selectedHostID }
+    }
+
+    private var locationLabels: [String: String] {
+        HerdrModel.locationLabels(for: locationCandidates)
     }
 
     private func submit() {
