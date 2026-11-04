@@ -338,6 +338,63 @@ final class HerdrCoreTests: XCTestCase {
         XCTAssertEqual(tabLabels["sp-one/tb-two"], "1 [tb-two]")
     }
 
+    func testTaskLocationGroupsSeparatePlacedAndUnplacedTasks() {
+        func task(_ address: String, parent: String? = nil) -> HerdrTask {
+            HerdrTask(
+                address: address,
+                name: address,
+                title: nil,
+                machine: nil,
+                state: "live",
+                status: nil,
+                createdAt: nil,
+                parent: parent
+            )
+        }
+
+        let tasks = [
+            task("t1"),
+            task("t2", parent: "t1"),
+            task("t3"),
+            task("t4")
+        ]
+        let locations = [
+            HerdrLocationChoice(
+                spaceID: "sp-one",
+                tabID: "tb-one",
+                spaceName: "~",
+                tabName: "1",
+                machine: nil,
+                terminalAddresses: ["t1", "t2"]
+            ),
+            HerdrLocationChoice(
+                spaceID: "sp-two",
+                tabID: "tb-two",
+                spaceName: "work",
+                tabName: "2",
+                machine: nil,
+                terminalAddresses: ["t3"]
+            )
+        ]
+
+        let groups = HerdrModel.taskLocationGroups(
+            tasks: tasks,
+            locations: locations
+        )
+        let unplaced = HerdrModel.unplacedTasks(
+            tasks: tasks,
+            locations: locations
+        )
+
+        XCTAssertEqual(groups.map(\.location.id), [
+            "sp-one/tb-one",
+            "sp-two/tb-two"
+        ])
+        XCTAssertEqual(groups[0].tasks.map(\.address), ["t1", "t2"])
+        XCTAssertEqual(groups[1].tasks.map(\.address), ["t3"])
+        XCTAssertEqual(unplaced.map(\.address), ["t4"])
+    }
+
     func testTaskDetailsIncludeTerminalGeometry() throws {
         let data = Data("""
         {

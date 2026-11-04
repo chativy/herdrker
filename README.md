@@ -43,9 +43,10 @@ close the window again when the work is no longer visible.
 
 Tasks with a parent are nested below that parent in the host's menu. Parent
 tasks still expose their own Attach/View action before their children.
-Tasks placed in Herdr tabs show that space and tab in the menu. If two spaces
-or tabs share the same display name, short IDs are shown so they can be told
-apart.
+Tasks placed in Herdr are grouped under their host as **Space → Tab → Task**;
+tasks without a Herdr location remain directly under the host.
+If two spaces or tabs share the same display name, short IDs are shown so they
+can be told apart.
 
 **Move to** appears only when the live task has another existing space or tab
 available on its host. It lists the destination spaces and their tabs. Moving

@@ -311,25 +311,86 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let submenu = NSMenu(title: group.host.displayName)
         submenu.autoenablesItems = false
 
-        if group.tasks.isEmpty {
+        let locations = appLocations.filter { $0.hostID == group.host.id }
+        let locationGroups = HerdrModel.taskLocationGroups(
+            tasks: group.tasks,
+            locations: locations
+        )
+        let unplacedTasks = HerdrModel.unplacedTasks(
+            tasks: group.tasks,
+            locations: locations
+        )
+
+        if locationGroups.isEmpty && unplacedTasks.isEmpty {
             submenu.addItem(disabledItem("No tasks"))
             return submenu
         }
 
+        let spaces = HerdrModel.spaces(
+            from: locationGroups.map(\.location)
+        )
+        let spaceLabels = HerdrModel.spaceLabels(for: spaces)
+        for space in spaces {
+            let tabGroups = locationGroups.filter {
+                $0.location.spaceID == space.id
+            }
+            let tabLabels = HerdrModel.tabLabels(
+                for: tabGroups.map(\.location)
+            )
+            let spaceItem = NSMenuItem(
+                title: spaceLabels[space.id] ?? space.label,
+                action: nil,
+                keyEquivalent: ""
+            )
+            let tabsMenu = NSMenu(title: spaceItem.title)
+            tabsMenu.autoenablesItems = false
+            for tabGroup in tabGroups {
+                let tabItem = NSMenuItem(
+                    title: tabLabels[tabGroup.location.id]
+                        ?? tabGroup.location.tabName,
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                let tasksMenu = NSMenu(title: tabItem.title)
+                tasksMenu.autoenablesItems = false
+                appendTaskNodes(
+                    HerdrModel.taskHierarchy(tasks: tabGroup.tasks),
+                    to: tasksMenu,
+                    includeLocation: false
+                )
+                tabItem.submenu = tasksMenu
+                tabsMenu.addItem(tabItem)
+            }
+            spaceItem.submenu = tabsMenu
+            submenu.addItem(spaceItem)
+        }
+
+        if !locationGroups.isEmpty && !unplacedTasks.isEmpty {
+            submenu.addItem(.separator())
+        }
         appendTaskNodes(
-            HerdrModel.taskHierarchy(tasks: group.tasks),
-            to: submenu
+            HerdrModel.taskHierarchy(tasks: unplacedTasks),
+            to: submenu,
+            includeLocation: false
         )
         return submenu
     }
 
-    private func appendTaskNodes(_ nodes: [HerdrTaskNode], to menu: NSMenu) {
-        let column = shortcutColumn(for: nodes)
+    private func appendTaskNodes(
+        _ nodes: [HerdrTaskNode],
+        to menu: NSMenu,
+        includeLocation: Bool
+    ) {
+        let column = shortcutColumn(
+            for: nodes,
+            includeLocation: includeLocation
+        )
         for node in nodes {
             menu.addItem(
                 taskItem(
                     for: node,
-                    shortcutColumn: column
+                    shortcutColumn: column,
+                    includeLocation: includeLocation
                 )
             )
         }
@@ -337,7 +398,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private func taskItem(
         for node: HerdrTaskNode,
-        shortcutColumn: CGFloat
+        shortcutColumn: CGFloat,
+        includeLocation: Bool
     ) -> NSMenuItem {
         let task = node.task
         let currentLocation = location(for: task)
@@ -348,7 +410,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let hasSubmenu = task.isFinished
             || !node.children.isEmpty
             || !availableMoveTargets.isEmpty
-        let title = taskTitle(for: task)
+        let title = taskTitle(
+            for: task,
+            includeLocation: includeLocation
+        )
         let item = NSMenuItem(
             title: title,
             action: nil,
@@ -412,7 +477,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
         if !node.children.isEmpty {
             actions.addItem(.separator())
-            appendTaskNodes(node.children, to: actions)
+            appendTaskNodes(
+                node.children,
+                to: actions,
+                includeLocation: includeLocation
+            )
         }
         item.submenu = actions
         return item
@@ -445,20 +514,33 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         return value
     }
 
-    private func shortcutColumn(for nodes: [HerdrTaskNode]) -> CGFloat {
+    private func shortcutColumn(
+        for nodes: [HerdrTaskNode],
+        includeLocation: Bool
+    ) -> CGFloat {
         let font = NSFont.menuFont(ofSize: 0)
         let widest = nodes.map { node in
-            (taskTitle(for: node.task) as NSString).size(
-                withAttributes: [.font: font]
-            ).width
+            (taskTitle(
+                for: node.task,
+                includeLocation: includeLocation
+            ) as NSString)
+                .size(withAttributes: [.font: font])
+                .width
         }.max() ?? 0
         return ceil(widest) + 16
     }
 
-    private func taskTitle(for task: HerdrTask) -> String {
-        let locationSuffix = location(for: task).map {
-            " · \(appLocationLabels[$0.id] ?? $0.label)"
-        } ?? ""
+    private func taskTitle(
+        for task: HerdrTask,
+        includeLocation: Bool
+    ) -> String {
+        let locationSuffix: String
+        if includeLocation, let currentLocation = location(for: task) {
+            locationSuffix =
+                " · \(appLocationLabels[currentLocation.id] ?? currentLocation.label)"
+        } else {
+            locationSuffix = ""
+        }
         return "\(task.displayName) — \(task.stateLabel)\(locationSuffix)"
     }
 
@@ -846,9 +928,26 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private var orderedTasks: [HerdrTask] {
         groups.flatMap { group in
-            HerdrModel.flattened(
-                HerdrModel.taskHierarchy(tasks: group.tasks)
+            let locations = appLocations.filter {
+                $0.hostID == group.host.id
+            }
+            let placed = HerdrModel.taskLocationGroups(
+                tasks: group.tasks,
+                locations: locations
+            ).flatMap { locationGroup in
+                HerdrModel.flattened(
+                    HerdrModel.taskHierarchy(tasks: locationGroup.tasks)
+                )
+            }
+            let unplaced = HerdrModel.flattened(
+                HerdrModel.taskHierarchy(
+                    tasks: HerdrModel.unplacedTasks(
+                        tasks: group.tasks,
+                        locations: locations
+                    )
+                )
             )
+            return placed + unplaced
         }
     }
 

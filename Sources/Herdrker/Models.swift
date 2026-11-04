@@ -116,6 +116,13 @@ struct HerdrTaskNode: Identifiable, Hashable, Sendable {
     var id: String { task.address }
 }
 
+struct HerdrTaskLocationGroup: Identifiable, Hashable, Sendable {
+    let location: HerdrLocationChoice
+    let tasks: [HerdrTask]
+
+    var id: String { location.id }
+}
+
 struct HerdrLocationChoice: Identifiable, Hashable, Sendable {
     let spaceID: String
     let tabID: String
@@ -269,6 +276,39 @@ enum HerdrModel {
 
     static func flattened(_ nodes: [HerdrTaskNode]) -> [HerdrTask] {
         nodes.flatMap { [$0.task] + flattened($0.children) }
+    }
+
+    static func taskLocationGroups(
+        tasks: [HerdrTask],
+        locations: [HerdrLocationChoice]
+    ) -> [HerdrTaskLocationGroup] {
+        var assigned = Set<String>()
+        return locations.compactMap { location in
+            let matchingTasks = tasks.filter {
+                !assigned.contains($0.address)
+                    && location.terminalAddresses.contains($0.address)
+            }
+            guard !matchingTasks.isEmpty else {
+                return nil
+            }
+            assigned.formUnion(matchingTasks.map(\.address))
+            return HerdrTaskLocationGroup(
+                location: location,
+                tasks: matchingTasks.sorted(by: taskOrder)
+            )
+        }
+    }
+
+    static func unplacedTasks(
+        tasks: [HerdrTask],
+        locations: [HerdrLocationChoice]
+    ) -> [HerdrTask] {
+        let placedAddresses = Set(
+            locations.flatMap(\.terminalAddresses)
+        )
+        return tasks
+            .filter { !placedAddresses.contains($0.address) }
+            .sorted(by: taskOrder)
     }
 
     static func locationLabels(
