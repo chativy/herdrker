@@ -297,21 +297,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        if visibleBackends.contains(.herdr) {
+        switch TaskBackendAvailability.menuLayout(for: visibleBackends) {
+        case .none:
+            break
+        case let .flat(backend):
+            switch backend {
+            case .herdr:
+                herdrHostItems().forEach(menu.addItem)
+            case .rex:
+                rexHostItems().forEach(menu.addItem)
+            }
+        case .sections:
             let herdrMenu = NSMenu(title: "Herdr")
             herdrMenu.autoenablesItems = false
-            for group in groups {
-                let hostItem = NSMenuItem(
-                    title: hostTitle(for: group),
-                    action: nil,
-                    keyEquivalent: ""
-                )
-                hostItem.submenu = taskMenu(for: group)
-                herdrMenu.addItem(hostItem)
-            }
-            if groups.isEmpty {
-                herdrMenu.addItem(disabledItem("No hosts"))
-            }
+            herdrHostItems().forEach(herdrMenu.addItem)
             let herdrItem = NSMenuItem(
                 title: "Herdr",
                 action: nil,
@@ -319,9 +318,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             )
             herdrItem.submenu = herdrMenu
             menu.addItem(herdrItem)
-        }
 
-        if visibleBackends.contains(.rex) {
             let rexItem = NSMenuItem(
                 title: "Rex",
                 action: nil,
@@ -463,6 +460,19 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             includeLocation: false
         )
         return submenu
+    }
+
+    private func herdrHostItems() -> [NSMenuItem] {
+        let items = groups.map { group in
+            let item = NSMenuItem(
+                title: hostTitle(for: group),
+                action: nil,
+                keyEquivalent: ""
+            )
+            item.submenu = taskMenu(for: group)
+            return item
+        }
+        return items.isEmpty ? [disabledItem("No hosts")] : items
     }
 
     private func appendTaskNodes(
@@ -703,7 +713,14 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             )
             return menu
         }
-        for group in rexHostGroups {
+        for item in rexHostItems() {
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    private func rexHostItems() -> [NSMenuItem] {
+        rexHostGroups.map { group in
             let suffix = group.tasks.isEmpty ? "" : " (\(group.tasks.count))"
             let warning = group.connectionError == nil ? "" : " — Unavailable"
             let item = NSMenuItem(
@@ -712,9 +729,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 keyEquivalent: ""
             )
             item.submenu = rexHostMenu(group)
-            menu.addItem(item)
+            return item
         }
-        return menu
     }
 
     private func rexHostMenu(_ group: RexHostGroup) -> NSMenu {

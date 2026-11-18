@@ -11,6 +11,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 - Use the official Herdr icon in the macOS status bar.
 - Show a prominent red dot beside the icon whenever either backend has at least one task. Herdr finished tasks count as tasks.
 - Show separate top-level **Herdr** and **Rex** sections only when that backend is installed and currently has at least one task. Within each, show the local machine first, followed by configured remote hosts. Keep installed backends available in New Task and Add Host even when their menu section is hidden.
+- When exactly one backend has tasks, promote its host items directly to the menu root and omit the backend wrapper level. Use backend wrappers only when both Herdr and Rex have tasks.
 - Refresh the task and host lists when the menu opens and periodically while the app is running.
 - Provide top-level actions for creating a task and adding a host.
 

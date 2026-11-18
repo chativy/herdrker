@@ -91,5 +91,21 @@ final class HotkeyPrefixTests: XCTestCase {
             ),
             []
         )
+        XCTAssertEqual(
+            TaskBackendAvailability.menuLayout(for: [.herdr]),
+            .flat(.herdr)
+        )
+        XCTAssertEqual(
+            TaskBackendAvailability.menuLayout(for: [.rex]),
+            .flat(.rex)
+        )
+        XCTAssertEqual(
+            TaskBackendAvailability.menuLayout(for: [.herdr, .rex]),
+            .sections
+        )
+        XCTAssertEqual(
+            TaskBackendAvailability.menuLayout(for: []),
+            .none
+        )
     }
 }

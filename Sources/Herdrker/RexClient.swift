@@ -17,6 +17,12 @@ enum TaskBackendKind: String, CaseIterable, Identifiable, Sendable {
 }
 
 enum TaskBackendAvailability {
+    enum MenuLayout: Equatable {
+        case none
+        case flat(TaskBackendKind)
+        case sections
+    }
+
     static func installed(
         herdr: Bool,
         rex: Bool
@@ -44,6 +50,15 @@ enum TaskBackendAvailability {
                 return hasRexTasks
             }
         }
+    }
+
+    static func menuLayout(
+        for visible: [TaskBackendKind]
+    ) -> MenuLayout {
+        if visible.count == 1, let backend = visible.first {
+            return .flat(backend)
+        }
+        return visible.isEmpty ? .none : .sections
     }
 }
 
