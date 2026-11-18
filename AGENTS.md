@@ -2,15 +2,15 @@
 
 ## Product Overview
 
-Herdrker is a macOS menu-bar-only application for observing and controlling tasks managed by `herdr-core` (`hc`). The app has no Dock icon or main window. All project documentation and user-facing UI text must be written in English, regardless of the language used for discussion.
+Herdrker is a macOS menu-bar-only application for observing and controlling tasks managed by `herdr-core` (`hc`) and Rex. The app has no Dock icon or main window. All project documentation and user-facing UI text must be written in English, regardless of the language used for discussion.
 
 ## Functional Requirements
 
 ### Menu bar
 
 - Use the official Herdr icon in the macOS status bar.
-- Show a prominent red dot beside the icon whenever `hc ls --all --json` returns at least one task, including finished tasks. Hide the dot when no tasks exist.
-- Show the local machine first, followed by configured remote hosts. Each host opens a submenu containing only that host's tasks.
+- Show a prominent red dot beside the icon whenever either backend has at least one task. Herdr finished tasks count as tasks.
+- Show separate top-level **Herdr** and **Rex** sections. Within each, show the local machine first, followed by configured remote hosts.
 - Refresh the task and host lists when the menu opens and periodically while the app is running.
 - Provide top-level actions for creating a task and adding a host.
 
@@ -19,7 +19,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 - A task dialog must let the user choose a host, optional live parent task, optional task name, existing Herdr space/tab location, shell command, and working directory. Read locations from `herdr-app ls` and offer only locations on the selected host. Offer only live parent tasks on the selected host. When no parent is selected, preserve the current independent behavior with `--no-parent`; otherwise use `--parent <address>` without `--no-parent`. Pass a selected location through `--label "where=<space> / <tab>"` for CLI display and through `--label "herdr.space=<space-id>"` plus `--label "herdr.tab=<tab-id>"` so the Herdr app places the terminal in that tab. When the command is blank, omit it so Herdr Core starts that host's login shell. Default a local task with no working directory to the user's home folder. Create the task with `hc run --bg`, passing `--on <host>` for remote hosts. Do not inject shell color variables from the app.
 - After a task is created successfully, immediately open its terminal and attach to the new task.
 - Supply the creation client's terminal identity (`TERM`, `TERM_PROGRAM`, and `COLORTERM`) because Herdr Core fixes it before the task is attached. Do not inject `CLICOLOR`; shell color preferences belong in the user's shell configuration.
-- Assign global hotkeys to the first 10 tasks in menu order using the configured modifier prefix plus 1 through 9, then 0. The default prefix is Command+Option. The top-level **Assign Hotkey…** menu item must capture a modifier prefix from the keyboard and apply it to all task shortcuts. Invoking a hotkey must focus the tracked task window or open and attach it when no tracked window exists.
+- Assign global hotkeys to the first 10 tasks across the visible Herdr and Rex menu order using the configured modifier prefix plus 1 through 9, then 0. The default prefix is Command+Option. The top-level **Assign Hotkey…** menu item must capture a modifier prefix from the keyboard and apply it to all task shortcuts. Invoking a Herdr hotkey must focus or attach its viewer; invoking a Rex hotkey must focus its block and activate Rex.
 - AppKit hides native key-equivalent text on menu items that have submenus. Measure the widest task title in each menu, then append shortcuts through a shared left-aligned tab stop 16 points after that width. Trim the final shortcut advance by 8 points to tighten the gap before the native submenu arrow while retaining Carbon global-hotkey behavior.
 - Use the configured prefix for New Task (`N`), Refresh (`R`), and Quit (`Q`) as global shortcuts. Place **Assign Hotkey…** immediately above **Quit Herdrker**.
 - A live task opens interactively in Ghostty when installed at `/Applications/Ghostty.app`; otherwise, open Terminal. Use Ghostty's AppleScript `new window with configuration` command so all task windows belong to one Ghostty application instance rather than launching new application instances.
@@ -33,12 +33,25 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 
 ### Hosts
 
-- A host dialog must collect an optional display name, an SSH target such as `user@example.com` or an SSH config alias, and an **Install herdr-core if missing** option.
-- Add hosts with `hc machine add`, passing `--name` and `--install` when selected. Never store SSH passwords or private keys in the app.
+- The Add Host dialog must select Herdr or Rex first.
+- Herdr hosts collect an optional display name, an SSH target such as `user@example.com` or an SSH config alias, and an **Install herdr-core if missing** option. Add them with `hc machine add`, passing `--name` and `--install` when selected.
+- Rex hosts collect a required label, SSH/HTTPS-or-Tailscale/Unix-socket endpoint, optional icon, and reachability-check option. Add them with `rex hosts add`.
+- Never attempt to install Rex Server automatically. After adding, run `rex hosts check` when selected and keep the host registered if it is temporarily unreachable. Show actionable installation guidance instead of running a remote installer.
+- Never store SSH passwords or private keys in the app.
+
+### Rex
+
+- Locate the `rex` CLI from `PATH`, `/Applications/Rex.app`, `/Applications/Rex Beta.app`, or the matching user Applications folders.
+- Read hosts with `rex hosts --json`, sessions with `rex ls --json`, and terminal blocks with `rex session inspect <session> --json`.
+- Present Rex tasks as Host → Session → Window → Block.
+- Open a Rex block with `rex block focus` and activate the Rex app. Support block rename and close from the task submenu.
+- Create Rex tasks with the control API using `session.create` or `session.new_window`, the `com.superlogical.terminal.shell` flavor, cwd/label options, and `initial_input` when a command is supplied. A blank command must start Rex's default shell.
 
 ## Technical Architecture
 
 Implement the app in Swift 6 with AppKit status items and SwiftUI dialogs, built with Swift Package Manager. Keep Herdr Core access behind an injectable client that invokes `hc` as a child process and decodes JSON defensively. Never construct shell command strings for user input; pass arguments to `Process` directly.
+
+Keep Rex access behind an injectable `RexClient` that invokes the bundled or installed `rex` CLI with argument arrays. Decode host/session JSON defensively. Do not require the third-party `rex-attach` client.
 
 The executable should locate `herdr-core` from `PATH`, `~/.local/bin`, `/opt/homebrew/bin`, or `/usr/local/bin`. Report command failures through native alerts and refresh the menu after mutations.
 
@@ -47,7 +60,7 @@ Herdrker may itself be launched from a Herdr Core task. Remove inherited `HC_TER
 ## Project Structure
 
 - `Sources/Herdrker/`: application, menu, dialog, model, and CLI client code.
-- `Tests/HerdrkerTests/`: unit tests, including JSON decoding and command construction.
+- `Tests/HerdrkerTests/`: unit tests, including Herdr/Rex JSON decoding and command construction.
 - `Resources/`: official Herdr icon, bundle metadata, and asset provenance.
 - `scripts/build-app.sh`: release build and `.app` bundle assembly.
 

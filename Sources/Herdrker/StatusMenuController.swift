@@ -54,6 +54,19 @@ private final class MoveTaskPayload: NSObject {
     }
 }
 
+private final class RexTaskPayload: NSObject {
+    let task: RexTaskBlock
+
+    init(task: RexTaskBlock) {
+        self.task = task
+    }
+}
+
+private enum TaskShortcutTarget: Hashable {
+    case herdr(HerdrTask)
+    case rex(RexTaskBlock)
+}
+
 @MainActor
 private final class HotkeyRecorder: NSObject {
     let label: NSTextField
@@ -106,6 +119,7 @@ private final class HotkeyRecorder: NSObject {
 @MainActor
 final class StatusMenuController: NSObject, NSMenuDelegate {
     private let client: any HerdrCoreProviding
+    private let rexClient: RexClient
     private let terminalLauncher: TerminalLauncher
     private let herdrAppClient: HerdrAppLocationClient
     private let statusItem: NSStatusItem
@@ -117,8 +131,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private var hosts: [HerdrHost] = []
     private var tasks: [HerdrTask] = []
     private var groups: [HerdrHostGroup] = []
+    private var rexHostGroups: [RexHostGroup] = []
     private var appLocations: [HerdrLocationChoice] = []
     private var loadError: String?
+    private var rexLoadError: String?
     private var isMenuOpen = false
     private var refreshLoop: Task<Void, Never>?
     private var activeDialog: DialogWindowController?
@@ -127,10 +143,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     init(
         client: any HerdrCoreProviding,
+        rexClient: RexClient = RexClient(),
         terminalLauncher: TerminalLauncher = TerminalLauncher(),
         herdrAppClient: HerdrAppLocationClient = HerdrAppLocationClient()
     ) {
         self.client = client
+        self.rexClient = rexClient
         self.terminalLauncher = terminalLauncher
         self.herdrAppClient = herdrAppClient
         self.statusItem = NSStatusBar.system.statusItem(
@@ -188,6 +206,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         var nextTasks = tasks
         var nextHosts = hosts
         var nextLocations = appLocations
+        var nextRexGroups = rexHostGroups
+        var nextRexError: String?
         var errors: [String] = []
 
         do {
@@ -206,12 +226,27 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             nextLocations = (try? await herdrAppClient.listLocations()) ?? []
         }
 
+        if rexClient.isAvailable {
+            do {
+                nextRexGroups = try await rexClient.listHostGroups()
+            } catch {
+                nextRexError = error.localizedDescription
+            }
+        } else {
+            nextRexError = "Rex CLI is not installed."
+        }
+
         tasks = nextTasks
         hosts = nextHosts
         appLocations = nextLocations
+        rexHostGroups = nextRexGroups
+        rexLoadError = nextRexError
         groups = HerdrModel.groups(hosts: nextHosts, tasks: nextTasks)
         loadError = errors.first
-        updateStatusIcon(hasTasks: !nextTasks.isEmpty)
+        updateStatusIcon(
+            hasTasks: !nextTasks.isEmpty
+                || nextRexGroups.contains { !$0.tasks.isEmpty }
+        )
         if !isMenuOpen {
             rebuildMenu()
         }
@@ -234,6 +269,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
+        let herdrMenu = NSMenu(title: "Herdr")
+        herdrMenu.autoenablesItems = false
         for group in groups {
             let hostItem = NSMenuItem(
                 title: hostTitle(for: group),
@@ -241,12 +278,26 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 keyEquivalent: ""
             )
             hostItem.submenu = taskMenu(for: group)
-            menu.addItem(hostItem)
+            herdrMenu.addItem(hostItem)
         }
-
         if groups.isEmpty {
-            menu.addItem(disabledItem("Loading tasks…"))
+            herdrMenu.addItem(disabledItem("No hosts"))
         }
+        let herdrItem = NSMenuItem(
+            title: "Herdr",
+            action: nil,
+            keyEquivalent: ""
+        )
+        herdrItem.submenu = herdrMenu
+        menu.addItem(herdrItem)
+
+        let rexItem = NSMenuItem(
+            title: "Rex",
+            action: nil,
+            keyEquivalent: ""
+        )
+        rexItem.submenu = rexRootMenu()
+        menu.addItem(rexItem)
 
         menu.addItem(.separator())
 
@@ -601,6 +652,150 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
     }
 
+    private func rexRootMenu() -> NSMenu {
+        let menu = NSMenu(title: "Rex")
+        menu.autoenablesItems = false
+        if !rexClient.isAvailable {
+            menu.addItem(disabledItem("Rex CLI unavailable"))
+            return menu
+        }
+        if rexHostGroups.isEmpty {
+            menu.addItem(
+                disabledItem(rexLoadError ?? "No Rex hosts")
+            )
+            return menu
+        }
+        for group in rexHostGroups {
+            let suffix = group.tasks.isEmpty ? "" : " (\(group.tasks.count))"
+            let warning = group.connectionError == nil ? "" : " — Unavailable"
+            let item = NSMenuItem(
+                title: group.host.displayName + suffix + warning,
+                action: nil,
+                keyEquivalent: ""
+            )
+            item.submenu = rexHostMenu(group)
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    private func rexHostMenu(_ group: RexHostGroup) -> NSMenu {
+        let menu = NSMenu(title: group.host.displayName)
+        menu.autoenablesItems = false
+        if let error = group.connectionError {
+            menu.addItem(disabledItem("Connection failed"))
+            let detail = disabledItem(error)
+            detail.toolTip = error
+            menu.addItem(detail)
+            return menu
+        }
+        if group.sessions.isEmpty {
+            menu.addItem(disabledItem("No sessions"))
+            return menu
+        }
+        for session in group.sessions {
+            let sessionItem = NSMenuItem(
+                title: session.displayName,
+                action: nil,
+                keyEquivalent: ""
+            )
+            let sessionsMenu = NSMenu(title: session.displayName)
+            sessionsMenu.autoenablesItems = false
+            if session.windows.isEmpty {
+                sessionsMenu.addItem(disabledItem("No windows"))
+            }
+            for window in session.windows {
+                let windowItem = NSMenuItem(
+                    title: window.displayName,
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                let tasksMenu = NSMenu(title: window.displayName)
+                tasksMenu.autoenablesItems = false
+                let column = rexShortcutColumn(for: window.blocks)
+                if window.blocks.isEmpty {
+                    tasksMenu.addItem(disabledItem("No terminal blocks"))
+                }
+                for task in window.blocks {
+                    tasksMenu.addItem(
+                        rexTaskItem(task, shortcutColumn: column)
+                    )
+                }
+                windowItem.submenu = tasksMenu
+                sessionsMenu.addItem(windowItem)
+            }
+            sessionItem.submenu = sessionsMenu
+            menu.addItem(sessionItem)
+        }
+        return menu
+    }
+
+    private func rexTaskItem(
+        _ task: RexTaskBlock,
+        shortcutColumn: CGFloat
+    ) -> NSMenuItem {
+        let title = "\(task.displayName) — \(task.stateLabel)"
+        let item = NSMenuItem(
+            title: title,
+            action: nil,
+            keyEquivalent: ""
+        )
+        if let index = shortcutIndex(for: task) {
+            let key = index == 9 ? "0" : String(index + 1)
+            item.attributedTitle = menuTitle(
+                title,
+                shortcut: "\(hotkeyPrefix.display)\(key)",
+                column: shortcutColumn
+            )
+        }
+        let payload = RexTaskPayload(task: task)
+        item.representedObject = payload
+        item.image = NSImage(
+            systemSymbolName: task.status == "blocked"
+                ? "exclamationmark.circle.fill"
+                : "circle.fill",
+            accessibilityDescription: task.stateLabel
+        )
+        let actions = NSMenu(title: task.displayName)
+        actions.autoenablesItems = false
+        let open = NSMenuItem(
+            title: "Open in Rex",
+            action: #selector(openRexTask(_:)),
+            keyEquivalent: ""
+        )
+        open.target = self
+        open.representedObject = payload
+        actions.addItem(open)
+        let rename = NSMenuItem(
+            title: "Rename…",
+            action: #selector(renameRexTask(_:)),
+            keyEquivalent: ""
+        )
+        rename.target = self
+        rename.representedObject = payload
+        actions.addItem(rename)
+        let close = NSMenuItem(
+            title: "Close Block",
+            action: #selector(confirmCloseRexTask(_:)),
+            keyEquivalent: ""
+        )
+        close.target = self
+        close.representedObject = payload
+        actions.addItem(close)
+        item.submenu = actions
+        return item
+    }
+
+    private func rexShortcutColumn(for tasks: [RexTaskBlock]) -> CGFloat {
+        let font = NSFont.menuFont(ofSize: 0)
+        let widest = tasks.map { task in
+            ("\(task.displayName) — \(task.stateLabel)" as NSString)
+                .size(withAttributes: [.font: font])
+                .width
+        }.max() ?? 0
+        return ceil(widest) + 16
+    }
+
     private func hostTitle(for group: HerdrHostGroup) -> String {
         let count = group.tasks.count
         let suffix = count == 0 ? "" : " (\(count))"
@@ -766,6 +961,90 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
     }
 
+    private func rexTask(from sender: NSMenuItem) -> RexTaskBlock? {
+        (sender.representedObject as? RexTaskPayload)?.task
+    }
+
+    @objc private func openRexTask(_ sender: NSMenuItem) {
+        guard let task = rexTask(from: sender) else {
+            return
+        }
+        activateRexTask(task)
+    }
+
+    private func activateRexTask(_ task: RexTaskBlock) {
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                try await rexClient.focus(task)
+            } catch {
+                showError(error)
+            }
+        }
+    }
+
+    @objc private func renameRexTask(_ sender: NSMenuItem) {
+        guard let task = rexTask(from: sender) else {
+            return
+        }
+        let field = NSTextField(string: task.displayName)
+        field.frame = NSRect(x: 0, y: 0, width: 320, height: 24)
+        let alert = NSAlert()
+        alert.messageText = "Rename Rex Block"
+        alert.informativeText = "Enter a new label for this block."
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+        let name = field.stringValue.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !name.isEmpty else {
+            return
+        }
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                try await rexClient.rename(task, to: name)
+                await refresh()
+            } catch {
+                showError(error)
+            }
+        }
+    }
+
+    @objc private func confirmCloseRexTask(_ sender: NSMenuItem) {
+        guard let task = rexTask(from: sender) else {
+            return
+        }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Close “\(task.displayName)”?"
+        alert.informativeText = "This closes the Rex block and ends its program."
+        alert.addButton(withTitle: "Close Block")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                try await rexClient.close(task)
+                await refresh()
+            } catch {
+                showError(error)
+            }
+        }
+    }
+
     @objc private func confirmRemoveTask(_ sender: NSMenuItem) {
         guard let task = task(from: sender) else {
             return
@@ -809,19 +1088,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private func presentNewTask(locations: [HerdrLocationChoice]) {
         let rootView = NewTaskDialog(
             hosts: groups.map(\.host),
-            tasks: orderedTasks,
+            tasks: orderedHerdrTasks,
             locations: locations,
+            rexHostGroups: rexHostGroups,
             onCancel: { [weak self] in
                 self?.activeDialog?.close()
             },
-            onSubmit: { [weak self] request in
+            onSubmit: { [weak self] submission in
                 self?.activeDialog?.close()
-                self?.createTask(request)
+                self?.createTask(submission)
             }
         )
         presentDialog(
             title: "Herdrker — New Task",
-            size: NSSize(width: 520, height: 520),
+            size: NSSize(width: 520, height: 580),
             rootView: AnyView(rootView)
         )
     }
@@ -831,14 +1111,14 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             onCancel: { [weak self] in
                 self?.activeDialog?.close()
             },
-            onSubmit: { [weak self] request in
+            onSubmit: { [weak self] submission in
                 self?.activeDialog?.close()
-                self?.addHost(request)
+                self?.addHost(submission)
             }
         )
         presentDialog(
             title: "Herdrker — Add Host",
-            size: NSSize(width: 520, height: 370),
+            size: NSSize(width: 520, height: 520),
             rootView: AnyView(rootView)
         )
     }
@@ -860,45 +1140,68 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         controller.present()
     }
 
-    private func createTask(_ request: NewTaskRequest) {
+    private func createTask(_ submission: NewTaskSubmission) {
         Task { [weak self] in
             guard let self else {
                 return
             }
             do {
-                let createdTask = try await client.createTask(
-                    request,
-                    environment: terminalLauncher.taskEnvironment
-                )
-                if let spaceID = request.herdrSpaceID,
-                   let tabID = request.herdrTabID,
-                   let location = appLocations.first(where: {
-                       $0.coreSpaceID == spaceID && $0.coreTabID == tabID
-                   }) {
-                    try? await herdrAppClient.waitForPlacement(
-                        address: createdTask.address,
-                        at: location
+                switch submission {
+                case let .herdr(request):
+                    let createdTask = try await client.createTask(
+                        request,
+                        environment: terminalLauncher.taskEnvironment
                     )
+                    if let spaceID = request.herdrSpaceID,
+                       let tabID = request.herdrTabID,
+                       let location = appLocations.first(where: {
+                           $0.coreSpaceID == spaceID && $0.coreTabID == tabID
+                       }) {
+                        try? await herdrAppClient.waitForPlacement(
+                            address: createdTask.address,
+                            at: location
+                        )
+                    }
+                    await refresh(includeLocations: true)
+                    let detailedTask = try await client.task(
+                        address: createdTask.address
+                    )
+                    try await terminalLauncher.open(
+                        task: detailedTask,
+                        coreExecutableURL: client.executableURL
+                    )
+                case let .rex(request):
+                    let createdTask = try await rexClient.createTask(request)
+                    await refresh(includeLocations: true)
+                    try await rexClient.focus(createdTask)
                 }
-                await refresh(includeLocations: true)
-                let detailedTask = try await client.task(address: createdTask.address)
-                try await terminalLauncher.open(
-                    task: detailedTask,
-                    coreExecutableURL: client.executableURL
-                )
             } catch {
                 showError(error)
             }
         }
     }
 
-    private func addHost(_ request: NewHostRequest) {
+    private func addHost(_ submission: NewHostSubmission) {
         Task { [weak self] in
             guard let self else {
                 return
             }
             do {
-                try await client.addHost(request)
+                switch submission {
+                case let .herdr(request):
+                    try await client.addHost(request)
+                case let .rex(request):
+                    let check = try await rexClient.addHost(request)
+                    if let check, !check.reachable {
+                        let alert = NSAlert()
+                        alert.alertStyle = .warning
+                        alert.messageText = "Rex host added, but not reachable"
+                        alert.informativeText =
+                            check.detail
+                            ?? "Install Rex Server on the remote machine, then run `rex hosts check \(check.label)`."
+                        alert.runModal()
+                    }
+                }
                 await refresh()
             } catch {
                 showError(error)
@@ -922,11 +1225,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         NSApplication.shared.terminate(nil)
     }
 
-    private var shortcutTasks: [HerdrTask] {
-        Array(orderedTasks.prefix(10))
+    private var shortcutTasks: [TaskShortcutTarget] {
+        let herdr = orderedHerdrTasks.map(TaskShortcutTarget.herdr)
+        let rex = orderedRexTasks.map(TaskShortcutTarget.rex)
+        return Array((herdr + rex).prefix(10))
     }
 
-    private var orderedTasks: [HerdrTask] {
+    private var orderedHerdrTasks: [HerdrTask] {
         groups.flatMap { group in
             let locations = appLocations.filter {
                 $0.hostID == group.host.id
@@ -951,8 +1256,26 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
     }
 
+    private var orderedRexTasks: [RexTaskBlock] {
+        rexHostGroups.flatMap(\.tasks)
+    }
+
     private func shortcutIndex(for task: HerdrTask) -> Int? {
-        shortcutTasks.firstIndex(where: { $0.address == task.address })
+        shortcutTasks.firstIndex {
+            if case let .herdr(candidate) = $0 {
+                return candidate.address == task.address
+            }
+            return false
+        }
+    }
+
+    private func shortcutIndex(for task: RexTaskBlock) -> Int? {
+        shortcutTasks.firstIndex {
+            if case let .rex(candidate) = $0 {
+                return candidate.id == task.id
+            }
+            return false
+        }
     }
 
     fileprivate func handleGlobalHotKey(id: UInt32) {
@@ -974,7 +1297,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         guard shortcutTasks.indices.contains(index) else {
             return
         }
-        activateTask(shortcutTasks[index])
+        switch shortcutTasks[index] {
+        case let .herdr(task):
+            activateTask(task)
+        case let .rex(task):
+            activateRexTask(task)
+        }
     }
 
     @discardableResult
