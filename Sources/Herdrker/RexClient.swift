@@ -30,6 +30,21 @@ enum TaskBackendAvailability {
         }
         return backends
     }
+
+    static func visible(
+        installed: [TaskBackendKind],
+        hasHerdrTasks: Bool,
+        hasRexTasks: Bool
+    ) -> [TaskBackendKind] {
+        installed.filter {
+            switch $0 {
+            case .herdr:
+                return hasHerdrTasks
+            case .rex:
+                return hasRexTasks
+            }
+        }
+    }
 }
 
 struct BackendSelectionStore {

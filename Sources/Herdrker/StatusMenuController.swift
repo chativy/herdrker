@@ -67,6 +67,12 @@ private enum TaskShortcutTarget: Hashable {
     case rex(RexTaskBlock)
 }
 
+private struct HotKeyRegistrationResult {
+    let registered: Int
+    let expected: Int
+    let failures: [String]
+}
+
 @MainActor
 private final class HotkeyRecorder: NSObject {
     let label: NSTextField
@@ -141,6 +147,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private var activeDialog: DialogWindowController?
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var hotKeyEventHandler: EventHandlerRef?
+    private var registeredTaskShortcutKeys: [TaskShortcutKey] = []
+    private var taskShortcutIndexByHotKeyID: [UInt32: Int] = [:]
+    private var registeredActionHotKeyIDs: Set<UInt32> = []
 
     private var availableBackends: [TaskBackendKind] {
         TaskBackendAvailability.installed(
@@ -178,7 +187,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     func start() {
-        registerGlobalHotKeys()
+        _ = registerGlobalHotKeys()
+        rebuildMenu()
         refreshLoop?.cancel()
         refreshLoop = Task { [weak self] in
             await self?.refresh(includeLocations: true)
@@ -267,6 +277,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     private func rebuildMenu() {
         menu.removeAllItems()
+        let visibleBackends = TaskBackendAvailability.visible(
+            installed: availableBackends,
+            hasHerdrTasks: groups.contains { !$0.tasks.isEmpty },
+            hasRexTasks: rexHostGroups.contains { !$0.tasks.isEmpty }
+        )
 
         if loadError != nil {
             let errorItem = NSMenuItem(
@@ -282,7 +297,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        if client != nil {
+        if visibleBackends.contains(.herdr) {
             let herdrMenu = NSMenu(title: "Herdr")
             herdrMenu.autoenablesItems = false
             for group in groups {
@@ -306,7 +321,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             menu.addItem(herdrItem)
         }
 
-        if rexClient.isAvailable {
+        if visibleBackends.contains(.rex) {
             let rexItem = NSMenuItem(
                 title: "Rex",
                 action: nil,
@@ -321,10 +336,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let newTaskItem = NSMenuItem(
             title: "New Task…",
             action: #selector(showNewTask),
-            keyEquivalent: "n"
+            keyEquivalent: registeredActionHotKeyIDs.contains(101) ? "n" : ""
         )
         newTaskItem.target = self
-        newTaskItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
+        if registeredActionHotKeyIDs.contains(101) {
+            newTaskItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
+        }
         newTaskItem.image = NSImage(
             systemSymbolName: "plus.square",
             accessibilityDescription: "New task"
@@ -346,10 +363,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let refreshItem = NSMenuItem(
             title: "Refresh",
             action: #selector(refreshNow),
-            keyEquivalent: "r"
+            keyEquivalent: registeredActionHotKeyIDs.contains(102) ? "r" : ""
         )
         refreshItem.target = self
-        refreshItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
+        if registeredActionHotKeyIDs.contains(102) {
+            refreshItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
+        }
         menu.addItem(refreshItem)
 
         menu.addItem(.separator())
@@ -368,10 +387,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let quitItem = NSMenuItem(
             title: "Quit Herdrker",
             action: #selector(quitApplication),
-            keyEquivalent: "q"
+            keyEquivalent: registeredActionHotKeyIDs.contains(103) ? "q" : ""
         )
         quitItem.target = self
-        quitItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
+        if registeredActionHotKeyIDs.contains(103) {
+            quitItem.keyEquivalentModifierMask = hotkeyPrefix.menuModifierMask
+        }
         menu.addItem(quitItem)
     }
 
@@ -488,7 +509,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             keyEquivalent: ""
         )
         if let index = shortcutIndex(for: task),
-           let shortcut = TaskShortcutKey.at(index: index) {
+           let shortcut = registeredTaskShortcut(at: index) {
             item.attributedTitle = menuTitle(
                 title,
                 shortcut: "\(hotkeyPrefix.display)\(shortcut.character)",
@@ -758,7 +779,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             keyEquivalent: ""
         )
         if let index = shortcutIndex(for: task),
-           let shortcut = TaskShortcutKey.at(index: index) {
+           let shortcut = registeredTaskShortcut(at: index) {
             item.attributedTitle = menuTitle(
                 title,
                 shortcut: "\(hotkeyPrefix.display)\(shortcut.character)",
@@ -1308,6 +1329,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
     }
 
+    private func registeredTaskShortcut(at index: Int) -> TaskShortcutKey? {
+        guard registeredTaskShortcutKeys.indices.contains(index) else {
+            return nil
+        }
+        return registeredTaskShortcutKeys[index]
+    }
+
     fileprivate func handleGlobalHotKey(id: UInt32) {
         switch id {
         case 101:
@@ -1323,11 +1351,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             break
         }
 
-        let index = Int(id) - 1
-        guard shortcutTasks.indices.contains(index) else {
+        guard let taskIndex = taskShortcutIndexByHotKeyID[id],
+              shortcutTasks.indices.contains(taskIndex) else {
             return
         }
-        switch shortcutTasks[index] {
+        switch shortcutTasks[taskIndex] {
         case let .herdr(task):
             activateTask(task)
         case let .rex(task):
@@ -1335,12 +1363,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
     }
 
-    @discardableResult
-    private func registerGlobalHotKeys() -> Int {
-        guard hotKeyRefs.isEmpty else {
-            return hotKeyRefs.count
-        }
-
+    private func registerGlobalHotKeys() -> HotKeyRegistrationResult {
+        registeredTaskShortcutKeys.removeAll()
+        taskShortcutIndexByHotKeyID.removeAll()
+        registeredActionHotKeyIDs.removeAll()
+        let expected = TaskShortcutKey.all.count + 3
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
@@ -1354,25 +1381,45 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             &hotKeyEventHandler
         )
         guard handlerStatus == noErr else {
-            return 0
+            return HotKeyRegistrationResult(
+                registered: 0,
+                expected: expected,
+                failures: ["all shortcuts"]
+            )
         }
 
-        var bindings = shortcutTasks.enumerated().compactMap {
-            index,
-            _ -> (id: UInt32, keyCode: UInt32)? in
-            guard let key = TaskShortcutKey.at(index: index) else {
-                return nil
-            }
-            return (UInt32(index + 1), key.keyCode)
-        }
-        let appBindings: [(id: UInt32, keyCode: UInt32)] = [
-            (101, UInt32(45)),
-            (102, UInt32(15)),
-            (103, UInt32(12))
-        ]
-        bindings.append(contentsOf: appBindings)
         let modifiers = hotkeyPrefix.carbonModifiers
-        for binding in bindings {
+        var failures: [String] = []
+        for (index, key) in TaskShortcutKey.all.enumerated() {
+            let hotKeyID = EventHotKeyID(
+                signature: herdrkerHotKeySignature,
+                id: UInt32(index + 1)
+            )
+            var hotKeyRef: EventHotKeyRef?
+            let status = RegisterEventHotKey(
+                key.keyCode,
+                modifiers,
+                hotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &hotKeyRef
+            )
+            if status == noErr, let hotKeyRef {
+                hotKeyRefs.append(hotKeyRef)
+                taskShortcutIndexByHotKeyID[hotKeyID.id] =
+                    registeredTaskShortcutKeys.count
+                registeredTaskShortcutKeys.append(key)
+            } else {
+                failures.append("\(hotkeyPrefix.display)\(key.character)")
+            }
+        }
+
+        let appBindings: [(id: UInt32, keyCode: UInt32, name: String)] = [
+            (101, UInt32(45), "n"),
+            (102, UInt32(15), "r"),
+            (103, UInt32(12), "q")
+        ]
+        for binding in appBindings {
             var hotKeyRef: EventHotKeyRef?
             let hotKeyID = EventHotKeyID(
                 signature: herdrkerHotKeySignature,
@@ -1388,9 +1435,16 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             )
             if status == noErr, let hotKeyRef {
                 hotKeyRefs.append(hotKeyRef)
+                registeredActionHotKeyIDs.insert(binding.id)
+            } else {
+                failures.append("\(hotkeyPrefix.display)\(binding.name)")
             }
         }
-        return hotKeyRefs.count
+        return HotKeyRegistrationResult(
+            registered: hotKeyRefs.count,
+            expected: expected,
+            failures: failures
+        )
     }
 
     private func unregisterGlobalHotKeys() {
@@ -1398,6 +1452,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             UnregisterEventHotKey(hotKeyRef)
         }
         hotKeyRefs.removeAll()
+        registeredTaskShortcutKeys.removeAll()
+        taskShortcutIndexByHotKeyID.removeAll()
+        registeredActionHotKeyIDs.removeAll()
         if let hotKeyEventHandler {
             RemoveEventHandler(hotKeyEventHandler)
             self.hotKeyEventHandler = nil
@@ -1424,15 +1481,15 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         hotkeyPrefix = recorder.prefix
         hotkeyStore.save(recorder.prefix)
         unregisterGlobalHotKeys()
-        let registered = registerGlobalHotKeys()
+        let result = registerGlobalHotKeys()
         rebuildMenu()
 
-        let expected = shortcutTasks.count + 3
-        if registered < expected {
+        if !result.failures.isEmpty {
             let warning = NSAlert()
             warning.messageText = "Some hotkeys are unavailable"
             warning.informativeText =
-                "Only \(registered) of \(expected) global shortcuts could be registered. Another application or macOS may be using this combination."
+                "These shortcuts were not assigned because another application or macOS is using them:\n\n"
+                + result.failures.joined(separator: ", ")
             warning.runModal()
         }
     }

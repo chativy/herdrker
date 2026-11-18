@@ -27,6 +27,8 @@ final screens.
    commands, and working directories.
 4. Open a Herdr task in Ghostty or Terminal, or open a Rex block in Rex. A red
    dot beside the menu-bar icon indicates that either backend has tasks.
+   Backend sections with no tasks are hidden from the menu; New Task and Add
+   Host still offer every installed backend.
 5. Close the terminal window when you no longer need to see it. Closing the
    viewer does not stop the task; it continues under Herdr Core.
 6. Reopen the task from its host submenu or with its global hotkey.
@@ -71,7 +73,8 @@ the configured prefix plus `1` through `9`, `0`, then letters from `a` through
 The default prefix is `Command+Option`.
 Use **Assign Hotkey…** to press a different modifier prefix, such as
 `Command+Control` or `Command+Control+Option`; the new prefix applies to every
-task shortcut.
+task shortcut. Keys already claimed by another application or macOS are omitted,
+and the remaining shortcuts are assigned without gaps.
 
 The same prefix applies to these application actions:
 

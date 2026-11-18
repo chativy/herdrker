@@ -75,5 +75,21 @@ final class HotkeyPrefixTests: XCTestCase {
             TaskBackendAvailability.installed(herdr: true, rex: true),
             [.herdr, .rex]
         )
+        XCTAssertEqual(
+            TaskBackendAvailability.visible(
+                installed: [.herdr, .rex],
+                hasHerdrTasks: false,
+                hasRexTasks: true
+            ),
+            [.rex]
+        )
+        XCTAssertEqual(
+            TaskBackendAvailability.visible(
+                installed: [.herdr, .rex],
+                hasHerdrTasks: false,
+                hasRexTasks: false
+            ),
+            []
+        )
     }
 }

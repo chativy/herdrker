@@ -10,7 +10,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 
 - Use the official Herdr icon in the macOS status bar.
 - Show a prominent red dot beside the icon whenever either backend has at least one task. Herdr finished tasks count as tasks.
-- Show separate top-level **Herdr** and **Rex** sections only when that backend is installed. Within each, show the local machine first, followed by configured remote hosts.
+- Show separate top-level **Herdr** and **Rex** sections only when that backend is installed and currently has at least one task. Within each, show the local machine first, followed by configured remote hosts. Keep installed backends available in New Task and Add Host even when their menu section is hidden.
 - Refresh the task and host lists when the menu opens and periodically while the app is running.
 - Provide top-level actions for creating a task and adding a host.
 
@@ -20,6 +20,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 - After a task is created successfully, immediately open its terminal and attach to the new task.
 - Supply the creation client's terminal identity (`TERM`, `TERM_PROGRAM`, and `COLORTERM`) because Herdr Core fixes it before the task is attached. Do not inject `CLICOLOR`; shell color preferences belong in the user's shell configuration.
 - Assign global hotkeys to up to 33 tasks across the visible Herdr and Rex menu order using the configured modifier prefix plus 1 through 9, 0, then a through z except n, r, and q. Keep n, r, and q reserved for New Task, Refresh, and Quit. The default prefix is Command+Option. The top-level **Assign Hotkey…** menu item must capture a modifier prefix from the keyboard and apply it to all task shortcuts. Invoking a Herdr hotkey must focus or attach its viewer; invoking a Rex hotkey must focus its block and activate Rex.
+- Register every candidate shortcut independently. Exclude any key that macOS or another application already owns, compact successful task keys into menu order, hide shortcuts for failed registrations, and report the failed key combinations after assignment.
 - AppKit hides native key-equivalent text on menu items that have submenus. Measure the widest task title in each menu, then append shortcuts through a shared left-aligned tab stop 16 points after that width. Trim the final shortcut advance by 8 points to tighten the gap before the native submenu arrow while retaining Carbon global-hotkey behavior.
 - Use the configured prefix for New Task (`N`), Refresh (`R`), and Quit (`Q`) as global shortcuts. Place **Assign Hotkey…** immediately above **Quit Herdrker**.
 - A live task opens interactively in Ghostty when installed at `/Applications/Ghostty.app`; otherwise, open Terminal. Use Ghostty's AppleScript `new window with configuration` command so all task windows belong to one Ghostty application instance rather than launching new application instances.
