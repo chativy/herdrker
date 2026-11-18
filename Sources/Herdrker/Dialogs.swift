@@ -7,10 +7,12 @@ struct NewTaskDialog: View {
     let tasks: [HerdrTask]
     let locations: [HerdrLocationChoice]
     let rexHostGroups: [RexHostGroup]
+    let availableBackends: [TaskBackendKind]
+    let backendStore: BackendSelectionStore
     let onCancel: () -> Void
     let onSubmit: (NewTaskSubmission) -> Void
 
-    @State private var backend: TaskBackendKind = .herdr
+    @State private var backend: TaskBackendKind
     @State private var selectedHostID: String
     @State private var selectedRexHostID: String
     @State private var selectedRexSessionID = ""
@@ -27,6 +29,8 @@ struct NewTaskDialog: View {
         tasks: [HerdrTask],
         locations: [HerdrLocationChoice],
         rexHostGroups: [RexHostGroup],
+        availableBackends: [TaskBackendKind],
+        backendStore: BackendSelectionStore = BackendSelectionStore(),
         onCancel: @escaping () -> Void,
         onSubmit: @escaping (NewTaskSubmission) -> Void
     ) {
@@ -34,8 +38,13 @@ struct NewTaskDialog: View {
         self.tasks = tasks
         self.locations = locations
         self.rexHostGroups = rexHostGroups
+        self.availableBackends = availableBackends
+        self.backendStore = backendStore
         self.onCancel = onCancel
         self.onSubmit = onSubmit
+        _backend = State(
+            initialValue: backendStore.load(available: availableBackends)
+        )
         _selectedHostID = State(
             initialValue: hosts.first?.id ?? HerdrModel.localHostID
         )
@@ -52,7 +61,7 @@ struct NewTaskDialog: View {
                 .foregroundStyle(.secondary)
 
             Picker("Backend", selection: $backend) {
-                ForEach(TaskBackendKind.allCases) { backend in
+                ForEach(availableBackends) { backend in
                     Text(backend.displayName).tag(backend)
                 }
             }
@@ -129,6 +138,9 @@ struct NewTaskDialog: View {
             }) {
                 selectedRexSessionID = ""
             }
+        }
+        .onChange(of: backend) { _, newValue in
+            backendStore.save(newValue)
         }
         .onExitCommand(perform: onCancel)
     }
@@ -332,10 +344,12 @@ private enum RexEndpointKind: String, CaseIterable, Identifiable {
 
 @MainActor
 struct AddHostDialog: View {
+    let availableBackends: [TaskBackendKind]
+    let backendStore: BackendSelectionStore
     let onCancel: () -> Void
     let onSubmit: (NewHostSubmission) -> Void
 
-    @State private var backend: TaskBackendKind = .herdr
+    @State private var backend: TaskBackendKind
     @State private var hostName = ""
     @State private var sshTarget = ""
     @State private var installCore = true
@@ -346,6 +360,21 @@ struct AddHostDialog: View {
     @State private var checkRexHost = true
     @State private var validationError: String?
 
+    init(
+        availableBackends: [TaskBackendKind],
+        backendStore: BackendSelectionStore = BackendSelectionStore(),
+        onCancel: @escaping () -> Void,
+        onSubmit: @escaping (NewHostSubmission) -> Void
+    ) {
+        self.availableBackends = availableBackends
+        self.backendStore = backendStore
+        self.onCancel = onCancel
+        self.onSubmit = onSubmit
+        _backend = State(
+            initialValue: backendStore.load(available: availableBackends)
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Add Host")
@@ -354,7 +383,7 @@ struct AddHostDialog: View {
                 .foregroundStyle(.secondary)
 
             Picker("Backend", selection: $backend) {
-                ForEach(TaskBackendKind.allCases) { backend in
+                ForEach(availableBackends) { backend in
                     Text(backend.displayName).tag(backend)
                 }
             }
@@ -405,6 +434,9 @@ struct AddHostDialog: View {
         }
         .padding(24)
         .frame(width: 460)
+        .onChange(of: backend) { _, newValue in
+            backendStore.save(newValue)
+        }
         .onExitCommand(perform: onCancel)
     }
 

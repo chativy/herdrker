@@ -118,7 +118,7 @@ private final class HotkeyRecorder: NSObject {
 
 @MainActor
 final class StatusMenuController: NSObject, NSMenuDelegate {
-    private let client: any HerdrCoreProviding
+    private let client: (any HerdrCoreProviding)?
     private let rexClient: RexClient
     private let terminalLauncher: TerminalLauncher
     private let herdrAppClient: HerdrAppLocationClient
@@ -126,6 +126,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
     private let herdrIcon: NSImage?
     private let hotkeyStore: HotkeyPrefixStore
+    private let backendStore = BackendSelectionStore()
     private var hotkeyPrefix: HotkeyPrefix
 
     private var hosts: [HerdrHost] = []
@@ -141,8 +142,15 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var hotKeyEventHandler: EventHandlerRef?
 
+    private var availableBackends: [TaskBackendKind] {
+        TaskBackendAvailability.installed(
+            herdr: client != nil,
+            rex: rexClient.isAvailable
+        )
+    }
+
     init(
-        client: any HerdrCoreProviding,
+        client: (any HerdrCoreProviding)?,
         rexClient: RexClient = RexClient(),
         terminalLauncher: TerminalLauncher = TerminalLauncher(),
         herdrAppClient: HerdrAppLocationClient = HerdrAppLocationClient()
@@ -210,16 +218,21 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         var nextRexError: String?
         var errors: [String] = []
 
-        do {
-            nextTasks = try await client.listTasks()
-        } catch {
-            errors.append(error.localizedDescription)
-        }
+        if let client {
+            do {
+                nextTasks = try await client.listTasks()
+            } catch {
+                errors.append(error.localizedDescription)
+            }
 
-        do {
-            nextHosts = try await client.listHosts()
-        } catch {
-            errors.append(error.localizedDescription)
+            do {
+                nextHosts = try await client.listHosts()
+            } catch {
+                errors.append(error.localizedDescription)
+            }
+        } else {
+            nextTasks = []
+            nextHosts = []
         }
 
         if includeLocations {
@@ -269,35 +282,39 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        let herdrMenu = NSMenu(title: "Herdr")
-        herdrMenu.autoenablesItems = false
-        for group in groups {
-            let hostItem = NSMenuItem(
-                title: hostTitle(for: group),
+        if client != nil {
+            let herdrMenu = NSMenu(title: "Herdr")
+            herdrMenu.autoenablesItems = false
+            for group in groups {
+                let hostItem = NSMenuItem(
+                    title: hostTitle(for: group),
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                hostItem.submenu = taskMenu(for: group)
+                herdrMenu.addItem(hostItem)
+            }
+            if groups.isEmpty {
+                herdrMenu.addItem(disabledItem("No hosts"))
+            }
+            let herdrItem = NSMenuItem(
+                title: "Herdr",
                 action: nil,
                 keyEquivalent: ""
             )
-            hostItem.submenu = taskMenu(for: group)
-            herdrMenu.addItem(hostItem)
+            herdrItem.submenu = herdrMenu
+            menu.addItem(herdrItem)
         }
-        if groups.isEmpty {
-            herdrMenu.addItem(disabledItem("No hosts"))
-        }
-        let herdrItem = NSMenuItem(
-            title: "Herdr",
-            action: nil,
-            keyEquivalent: ""
-        )
-        herdrItem.submenu = herdrMenu
-        menu.addItem(herdrItem)
 
-        let rexItem = NSMenuItem(
-            title: "Rex",
-            action: nil,
-            keyEquivalent: ""
-        )
-        rexItem.submenu = rexRootMenu()
-        menu.addItem(rexItem)
+        if rexClient.isAvailable {
+            let rexItem = NSMenuItem(
+                title: "Rex",
+                action: nil,
+                keyEquivalent: ""
+            )
+            rexItem.submenu = rexRootMenu()
+            menu.addItem(rexItem)
+        }
 
         menu.addItem(.separator())
 
@@ -470,11 +487,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             action: nil,
             keyEquivalent: ""
         )
-        if let index = shortcutIndex(for: task) {
-            let key = index == 9 ? "0" : String(index + 1)
+        if let index = shortcutIndex(for: task),
+           let shortcut = TaskShortcutKey.at(index: index) {
             item.attributedTitle = menuTitle(
                 title,
-                shortcut: "\(hotkeyPrefix.display)\(key)",
+                shortcut: "\(hotkeyPrefix.display)\(shortcut.character)",
                 column: shortcutColumn
             )
         }
@@ -511,7 +528,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         if task.isFinished {
             let removeItem = NSMenuItem(
                 title: "Remove Task",
-                action: #selector(confirmRemoveTask(_:)),
+                action: #selector(removeTask(_:)),
                 keyEquivalent: ""
             )
             removeItem.target = self
@@ -740,11 +757,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             action: nil,
             keyEquivalent: ""
         )
-        if let index = shortcutIndex(for: task) {
-            let key = index == 9 ? "0" : String(index + 1)
+        if let index = shortcutIndex(for: task),
+           let shortcut = TaskShortcutKey.at(index: index) {
             item.attributedTitle = menuTitle(
                 title,
-                shortcut: "\(hotkeyPrefix.display)\(key)",
+                shortcut: "\(hotkeyPrefix.display)\(shortcut.character)",
                 column: shortcutColumn
             )
         }
@@ -897,7 +914,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let previous = location(for: task)
 
         Task { [weak self] in
-            guard let self else {
+            guard let self, let client = self.client else {
                 return
             }
             do {
@@ -946,7 +963,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             return
         }
         Task { [weak self] in
-            guard let self else {
+            guard let self, let client = self.client else {
                 return
             }
             do {
@@ -1045,24 +1062,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
     }
 
-    @objc private func confirmRemoveTask(_ sender: NSMenuItem) {
+    @objc private func removeTask(_ sender: NSMenuItem) {
         guard let task = task(from: sender) else {
             return
         }
 
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Remove “\(task.displayName)”?"
-        alert.informativeText = "This permanently removes the stopped task from Herdr Core."
-        alert.addButton(withTitle: "Remove")
-        alert.addButton(withTitle: "Cancel")
-
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            return
-        }
-
         Task { [weak self] in
-            guard let self else {
+            guard let self, let client = self.client else {
                 return
             }
             do {
@@ -1079,6 +1085,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             guard let self else {
                 return
             }
+            guard !availableBackends.isEmpty else {
+                return
+            }
             let locations = (try? await herdrAppClient.listLocations()) ?? []
             appLocations = locations
             presentNewTask(locations: locations)
@@ -1091,6 +1100,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             tasks: orderedHerdrTasks,
             locations: locations,
             rexHostGroups: rexHostGroups,
+            availableBackends: availableBackends,
+            backendStore: backendStore,
             onCancel: { [weak self] in
                 self?.activeDialog?.close()
             },
@@ -1107,7 +1118,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func showAddHost() {
+        guard !availableBackends.isEmpty else {
+            return
+        }
         let rootView = AddHostDialog(
+            availableBackends: availableBackends,
+            backendStore: backendStore,
             onCancel: { [weak self] in
                 self?.activeDialog?.close()
             },
@@ -1148,6 +1164,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             do {
                 switch submission {
                 case let .herdr(request):
+                    guard let client = self.client else {
+                        throw HerdrCoreError(
+                            kind: "hc_missing",
+                            message: "Herdr Core is not installed.",
+                            hint: nil
+                        )
+                    }
                     let createdTask = try await client.createTask(
                         request,
                         environment: terminalLauncher.taskEnvironment
@@ -1189,6 +1212,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             do {
                 switch submission {
                 case let .herdr(request):
+                    guard let client = self.client else {
+                        throw HerdrCoreError(
+                            kind: "hc_missing",
+                            message: "Herdr Core is not installed.",
+                            hint: nil
+                        )
+                    }
                     try await client.addHost(request)
                 case let .rex(request):
                     let check = try await rexClient.addHost(request)
@@ -1228,7 +1258,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private var shortcutTasks: [TaskShortcutTarget] {
         let herdr = orderedHerdrTasks.map(TaskShortcutTarget.herdr)
         let rex = orderedRexTasks.map(TaskShortcutTarget.rex)
-        return Array((herdr + rex).prefix(10))
+        return Array((herdr + rex).prefix(TaskShortcutKey.all.count))
     }
 
     private var orderedHerdrTasks: [HerdrTask] {
@@ -1327,11 +1357,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             return 0
         }
 
-        let bindings: [(id: UInt32, keyCode: UInt32)] = [
-            (1, 18), (2, 19), (3, 20), (4, 21), (5, 23),
-            (6, 22), (7, 26), (8, 28), (9, 25), (10, 29),
-            (101, 45), (102, 15), (103, 12)
+        var bindings = shortcutTasks.enumerated().compactMap {
+            index,
+            _ -> (id: UInt32, keyCode: UInt32)? in
+            guard let key = TaskShortcutKey.at(index: index) else {
+                return nil
+            }
+            return (UInt32(index + 1), key.keyCode)
+        }
+        let appBindings: [(id: UInt32, keyCode: UInt32)] = [
+            (101, UInt32(45)),
+            (102, UInt32(15)),
+            (103, UInt32(12))
         ]
+        bindings.append(contentsOf: appBindings)
         let modifiers = hotkeyPrefix.carbonModifiers
         for binding in bindings {
             var hotKeyRef: EventHotKeyRef?
@@ -1388,11 +1427,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let registered = registerGlobalHotKeys()
         rebuildMenu()
 
-        if registered < 13 {
+        let expected = shortcutTasks.count + 3
+        if registered < expected {
             let warning = NSAlert()
             warning.messageText = "Some hotkeys are unavailable"
             warning.informativeText =
-                "Only \(registered) of 13 global shortcuts could be registered. Another application or macOS may be using this combination."
+                "Only \(registered) of \(expected) global shortcuts could be registered. Another application or macOS may be using this combination."
             warning.runModal()
         }
     }

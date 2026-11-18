@@ -10,7 +10,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 
 - Use the official Herdr icon in the macOS status bar.
 - Show a prominent red dot beside the icon whenever either backend has at least one task. Herdr finished tasks count as tasks.
-- Show separate top-level **Herdr** and **Rex** sections. Within each, show the local machine first, followed by configured remote hosts.
+- Show separate top-level **Herdr** and **Rex** sections only when that backend is installed. Within each, show the local machine first, followed by configured remote hosts.
 - Refresh the task and host lists when the menu opens and periodically while the app is running.
 - Provide top-level actions for creating a task and adding a host.
 
@@ -19,13 +19,13 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 - A task dialog must let the user choose a host, optional live parent task, optional task name, existing Herdr space/tab location, shell command, and working directory. Read locations from `herdr-app ls` and offer only locations on the selected host. Offer only live parent tasks on the selected host. When no parent is selected, preserve the current independent behavior with `--no-parent`; otherwise use `--parent <address>` without `--no-parent`. Pass a selected location through `--label "where=<space> / <tab>"` for CLI display and through `--label "herdr.space=<space-id>"` plus `--label "herdr.tab=<tab-id>"` so the Herdr app places the terminal in that tab. When the command is blank, omit it so Herdr Core starts that host's login shell. Default a local task with no working directory to the user's home folder. Create the task with `hc run --bg`, passing `--on <host>` for remote hosts. Do not inject shell color variables from the app.
 - After a task is created successfully, immediately open its terminal and attach to the new task.
 - Supply the creation client's terminal identity (`TERM`, `TERM_PROGRAM`, and `COLORTERM`) because Herdr Core fixes it before the task is attached. Do not inject `CLICOLOR`; shell color preferences belong in the user's shell configuration.
-- Assign global hotkeys to the first 10 tasks across the visible Herdr and Rex menu order using the configured modifier prefix plus 1 through 9, then 0. The default prefix is Command+Option. The top-level **Assign Hotkey…** menu item must capture a modifier prefix from the keyboard and apply it to all task shortcuts. Invoking a Herdr hotkey must focus or attach its viewer; invoking a Rex hotkey must focus its block and activate Rex.
+- Assign global hotkeys to up to 33 tasks across the visible Herdr and Rex menu order using the configured modifier prefix plus 1 through 9, 0, then a through z except n, r, and q. Keep n, r, and q reserved for New Task, Refresh, and Quit. The default prefix is Command+Option. The top-level **Assign Hotkey…** menu item must capture a modifier prefix from the keyboard and apply it to all task shortcuts. Invoking a Herdr hotkey must focus or attach its viewer; invoking a Rex hotkey must focus its block and activate Rex.
 - AppKit hides native key-equivalent text on menu items that have submenus. Measure the widest task title in each menu, then append shortcuts through a shared left-aligned tab stop 16 points after that width. Trim the final shortcut advance by 8 points to tighten the gap before the native submenu arrow while retaining Carbon global-hotkey behavior.
 - Use the configured prefix for New Task (`N`), Refresh (`R`), and Quit (`Q`) as global shortcuts. Place **Assign Hotkey…** immediately above **Quit Herdrker**.
 - A live task opens interactively in Ghostty when installed at `/Applications/Ghostty.app`; otherwise, open Terminal. Use Ghostty's AppleScript `new window with configuration` command so all task windows belong to one Ghostty application instance rather than launching new application instances.
 - Resolve the selected task with `hc get <address> --json`, then open and attach with all available history. Track Ghostty windows by the stable AppleScript window ID so a hotkey can focus the specific existing window.
 - A finished task opens its final screen with `hc read <address>` through `less -S` so long lines preserve their original width. The terminal process must ignore task input. Do not call `attach` for finished tasks because Herdr Core rejects it.
-- A finished task's submenu must offer **View Final Screen** and **Remove Task**. Remove only finished tasks, using `hc rm <address>`.
+- A finished task's submenu must offer **View Final Screen** and **Remove Task**. Remove only finished tasks, using `hc rm <address>`, without a confirmation dialog.
 - Display task state clearly. Treat Herdr's `finished` state as stopped.
 - Within each host submenu, group placed tasks as **Space → Tab → Task** using `herdr-app ls`. Keep parent-child relationships nested within each tab group. Tasks without a Herdr location remain directly under the host. Keep hotkey numbering in visible preorder, with located groups first and unplaced tasks afterward.
 - Map `herdr-app ls` tab terminals back to task addresses. Show the selected space/tab beside each placed task in host menus. When multiple locations have the same space/tab name, append short space and tab IDs to both task labels and New Task picker entries so they remain distinguishable.
@@ -34,6 +34,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 ### Hosts
 
 - The Add Host dialog must select Herdr or Rex first.
+- Offer only installed backends in Add Host and New Task. Persist the last selected backend in UserDefaults and fall back to the first installed backend when it is unavailable.
 - Herdr hosts collect an optional display name, an SSH target such as `user@example.com` or an SSH config alias, and an **Install herdr-core if missing** option. Add them with `hc machine add`, passing `--name` and `--install` when selected.
 - Rex hosts collect a required label, SSH/HTTPS-or-Tailscale/Unix-socket endpoint, optional icon, and reachability-check option. Add them with `rex hosts add`.
 - Never attempt to install Rex Server automatically. After adding, run `rex hosts check` when selected and keep the host registered if it is temporarily unreachable. Show actionable installation guidance instead of running a remote installer.

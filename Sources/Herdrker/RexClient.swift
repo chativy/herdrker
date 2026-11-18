@@ -16,6 +16,48 @@ enum TaskBackendKind: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum TaskBackendAvailability {
+    static func installed(
+        herdr: Bool,
+        rex: Bool
+    ) -> [TaskBackendKind] {
+        var backends: [TaskBackendKind] = []
+        if herdr {
+            backends.append(.herdr)
+        }
+        if rex {
+            backends.append(.rex)
+        }
+        return backends
+    }
+}
+
+struct BackendSelectionStore {
+    private let defaults: UserDefaults
+    private let key: String
+
+    init(
+        defaults: UserDefaults = .standard,
+        key: String = "lastTaskBackend"
+    ) {
+        self.defaults = defaults
+        self.key = key
+    }
+
+    func load(available: [TaskBackendKind]) -> TaskBackendKind {
+        let stored = defaults.string(forKey: key)
+            .flatMap(TaskBackendKind.init(rawValue:))
+        if let stored, available.contains(stored) {
+            return stored
+        }
+        return available.first ?? .herdr
+    }
+
+    func save(_ backend: TaskBackendKind) {
+        defaults.set(backend.rawValue, forKey: key)
+    }
+}
+
 struct RexHost: Identifiable, Hashable, Sendable {
     static let localID = "__rex_local__"
 

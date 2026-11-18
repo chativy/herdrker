@@ -19,11 +19,12 @@ final screens.
 ## Usage
 
 1. Launch Herdrker. It appears only in the macOS menu bar.
-2. Choose **Add Host…**, select Herdr or Rex, and register the remote machine.
-   Rex host registration does not install Rex Server automatically.
-3. Choose **New Task…** and select the Herdr or Rex backend. Herdr supports
-   parent tasks and space/tab locations. Rex supports hosts, sessions, windows,
-   labels, commands, and working directories.
+2. Choose **Add Host…** and register a remote machine with an installed
+   backend. Herdrker remembers the last selected backend. Rex host registration
+   does not install Rex Server automatically.
+3. Choose **New Task…** and select an installed backend. Herdr supports parent
+   tasks and space/tab locations. Rex supports hosts, sessions, windows, labels,
+   commands, and working directories.
 4. Open a Herdr task in Ghostty or Terminal, or open a Rex block in Rex. A red
    dot beside the menu-bar icon indicates that either backend has tasks.
 5. Close the terminal window when you no longer need to see it. Closing the
@@ -35,7 +36,8 @@ final screens.
 ![The New Task dialog with Herdr and Rex backend selection](docs/images/new-task.png)
 
 Finished tasks open as read-only final screens. Their submenu also provides
-**Remove Task**; removal is available only for finished tasks.
+**Remove Task**; removal is available only for finished tasks and does not ask
+for confirmation.
 
 ## Recommended Workflow
 
@@ -63,9 +65,10 @@ opens a new viewer and attaches to the still-running task.
 
 ## Hotkeys
 
-The menu displays the first 10 tasks across both backends and assigns the
-configured prefix plus `1` through `9`, then `0`. The default prefix is
-`Command+Option`.
+The menu assigns shortcuts to as many as 33 tasks across both backends using
+the configured prefix plus `1` through `9`, `0`, then letters from `a` through
+`z` except `n`, `r`, and `q`, which remain reserved for application actions.
+The default prefix is `Command+Option`.
 Use **Assign Hotkey…** to press a different modifier prefix, such as
 `Command+Control` or `Command+Control+Option`; the new prefix applies to every
 task shortcut.
