@@ -420,6 +420,19 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             let tabGroups = locationGroups.filter {
                 $0.location.spaceID == space.id
             }
+            let spaceTasks = tabGroups.flatMap(\.tasks)
+            let placement = HerdrModel.menuPlacement(
+                spaceTaskCount: spaceTasks.count,
+                tabCount: tabGroups.count
+            )
+            if placement == .host {
+                appendTaskNodes(
+                    HerdrModel.taskHierarchy(tasks: spaceTasks),
+                    to: submenu,
+                    includeLocation: false
+                )
+                continue
+            }
             let tabLabels = HerdrModel.tabLabels(
                 for: tabGroups.map(\.location)
             )
@@ -430,22 +443,30 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             )
             let tabsMenu = NSMenu(title: spaceItem.title)
             tabsMenu.autoenablesItems = false
-            for tabGroup in tabGroups {
-                let tabItem = NSMenuItem(
-                    title: tabLabels[tabGroup.location.id]
-                        ?? tabGroup.location.tabName,
-                    action: nil,
-                    keyEquivalent: ""
-                )
-                let tasksMenu = NSMenu(title: tabItem.title)
-                tasksMenu.autoenablesItems = false
+            if placement == .space {
                 appendTaskNodes(
-                    HerdrModel.taskHierarchy(tasks: tabGroup.tasks),
-                    to: tasksMenu,
+                    HerdrModel.taskHierarchy(tasks: spaceTasks),
+                    to: tabsMenu,
                     includeLocation: false
                 )
-                tabItem.submenu = tasksMenu
-                tabsMenu.addItem(tabItem)
+            } else {
+                for tabGroup in tabGroups {
+                    let tabItem = NSMenuItem(
+                        title: tabLabels[tabGroup.location.id]
+                            ?? tabGroup.location.tabName,
+                        action: nil,
+                        keyEquivalent: ""
+                    )
+                    let tasksMenu = NSMenu(title: tabItem.title)
+                    tasksMenu.autoenablesItems = false
+                    appendTaskNodes(
+                        HerdrModel.taskHierarchy(tasks: tabGroup.tasks),
+                        to: tasksMenu,
+                        includeLocation: false
+                    )
+                    tabItem.submenu = tasksMenu
+                    tabsMenu.addItem(tabItem)
+                }
             }
             spaceItem.submenu = tabsMenu
             submenu.addItem(spaceItem)

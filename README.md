@@ -53,6 +53,8 @@ Tasks with a parent are nested below that parent in the host's menu. Parent
 tasks still expose their own Attach/View action before their children.
 Tasks placed in Herdr are grouped under their host as **Space → Tab → Task**;
 tasks without a Herdr location remain directly under the host.
+Redundant levels are omitted: a space with one task appears directly under the
+host, and a space with one tab lists its tasks without a tab submenu.
 If two spaces or tabs share the same display name, short IDs are shown so they
 can be told apart.
 

@@ -395,6 +395,21 @@ final class HerdrCoreTests: XCTestCase {
         XCTAssertEqual(unplaced.map(\.address), ["t4"])
     }
 
+    func testHerdrMenuPlacementOmitsRedundantLevels() {
+        XCTAssertEqual(
+            HerdrModel.menuPlacement(spaceTaskCount: 1, tabCount: 3),
+            .host
+        )
+        XCTAssertEqual(
+            HerdrModel.menuPlacement(spaceTaskCount: 4, tabCount: 1),
+            .space
+        )
+        XCTAssertEqual(
+            HerdrModel.menuPlacement(spaceTaskCount: 4, tabCount: 2),
+            .tab
+        )
+    }
+
     func testTaskDetailsIncludeTerminalGeometry() throws {
         let data = Data("""
         {
