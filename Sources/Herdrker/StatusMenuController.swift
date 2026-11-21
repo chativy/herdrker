@@ -678,14 +678,51 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
         let spaces = HerdrModel.spaces(from: locations)
         let spaceLabels = HerdrModel.spaceLabels(for: spaces)
+        let locationLabels = HerdrModel.locationLabels(for: locations)
         for space in spaces {
             let spaceLocations = locations.filter { $0.spaceID == space.id }
             let tabLabels = HerdrModel.tabLabels(for: spaceLocations)
+            let layout = HerdrModel.moveTargetLayout(
+                spaceCount: spaces.count,
+                tabCount: spaceLocations.count
+            )
+            if layout == .location {
+                let location = spaceLocations[0]
+                submenu.addItem(
+                    moveTargetItem(
+                        for: task,
+                        location: location,
+                        title: locationLabels[location.id] ?? location.label
+                    )
+                )
+                continue
+            }
+            if layout == .tabs {
+                for location in spaceLocations {
+                    submenu.addItem(
+                        moveTargetItem(
+                            for: task,
+                            location: location,
+                            title: tabLabels[location.id] ?? location.tabName
+                        )
+                    )
+                }
+                continue
+            }
             let spaceItem = NSMenuItem(
                 title: spaceLabels[space.id] ?? space.label,
-                action: nil,
+                action: layout == .space ? #selector(moveTask(_:)) : nil,
                 keyEquivalent: ""
             )
+            if layout == .space, let location = spaceLocations.first {
+                spaceItem.target = self
+                spaceItem.representedObject = MoveTaskPayload(
+                    task: task,
+                    location: location
+                )
+                submenu.addItem(spaceItem)
+                continue
+            }
             let tabsMenu = NSMenu(title: spaceItem.title)
             tabsMenu.autoenablesItems = false
             for location in spaceLocations {
@@ -705,6 +742,24 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             submenu.addItem(spaceItem)
         }
         item.submenu = submenu
+        return item
+    }
+
+    private func moveTargetItem(
+        for task: HerdrTask,
+        location: HerdrLocationChoice,
+        title: String
+    ) -> NSMenuItem {
+        let item = NSMenuItem(
+            title: title,
+            action: #selector(moveTask(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.representedObject = MoveTaskPayload(
+            task: task,
+            location: location
+        )
         return item
     }
 

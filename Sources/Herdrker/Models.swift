@@ -129,6 +129,13 @@ enum HerdrTaskMenuPlacement: Equatable, Sendable {
     case tab
 }
 
+enum HerdrMoveTargetLayout: Equatable, Sendable {
+    case location
+    case tabs
+    case space
+    case spaceTabs
+}
+
 struct HerdrLocationChoice: Identifiable, Hashable, Sendable {
     let spaceID: String
     let tabID: String
@@ -417,6 +424,16 @@ enum HerdrModel {
             return .host
         }
         return tabCount == 1 ? .space : .tab
+    }
+
+    static func moveTargetLayout(
+        spaceCount: Int,
+        tabCount: Int
+    ) -> HerdrMoveTargetLayout {
+        if spaceCount == 1 {
+            return tabCount == 1 ? .location : .tabs
+        }
+        return tabCount == 1 ? .space : .spaceTabs
     }
 
     private static func taskOrder(_ lhs: HerdrTask, _ rhs: HerdrTask) -> Bool {

@@ -410,6 +410,25 @@ final class HerdrCoreTests: XCTestCase {
         )
     }
 
+    func testMoveTargetLayoutOmitsRedundantLevels() {
+        XCTAssertEqual(
+            HerdrModel.moveTargetLayout(spaceCount: 1, tabCount: 1),
+            .location
+        )
+        XCTAssertEqual(
+            HerdrModel.moveTargetLayout(spaceCount: 1, tabCount: 3),
+            .tabs
+        )
+        XCTAssertEqual(
+            HerdrModel.moveTargetLayout(spaceCount: 3, tabCount: 1),
+            .space
+        )
+        XCTAssertEqual(
+            HerdrModel.moveTargetLayout(spaceCount: 3, tabCount: 2),
+            .spaceTabs
+        )
+    }
+
     func testTaskDetailsIncludeTerminalGeometry() throws {
         let data = Data("""
         {

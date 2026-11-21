@@ -62,6 +62,8 @@ can be told apart.
 available on its host. It lists the destination spaces and their tabs. Moving
 keeps the task process running and places its existing terminal in the selected
 Herdr tab. A live task without move targets remains directly selectable.
+Single destination spaces and single destination tabs are shown without
+redundant submenu levels.
 
 For example, keep a shell, build process, and agent session running on each
 host. Close all three windows while working elsewhere. Use the host submenu or

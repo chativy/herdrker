@@ -33,6 +33,7 @@ Herdrker is a macOS menu-bar-only application for observing and controlling task
 - Omit redundant Herdr menu levels: a space containing exactly one task is shown directly under the host, and a space with exactly one tab shows its tasks directly under the space. Use the tab level only when a space has multiple tabs and more than one task.
 - Map `herdr-app ls` tab terminals back to task addresses. Show the selected space/tab beside each placed task in host menus. When multiple locations have the same space/tab name, append short space and tab IDs to both task labels and New Task picker entries so they remain distinguishable.
 - Show **Move to** only when at least one other existing location is available on the task's host; include destination space submenus and, within each, selectable tabs. Exclude the task's current tab. A live leaf task with no move targets remains directly selectable. Move by parking the existing pane, setting `herdr.space` and `herdr.tab` through `hc label`, then waiting for the Herdr app to adopt the terminal in the selected tab. Restore the previous location if the move fails.
+- Apply the same redundant-level reduction to **Move to** destinations: omit the space level when only one destination space exists, and make a destination space directly actionable when it contains one tab. Show tab submenus only for multiple destination tabs.
 
 ### Hosts
 
